@@ -26,7 +26,7 @@ const TYPE_COLORS: Record<string, string> = {
 }
 
 function loadSettings() {
-  let settingsStr = localStorage.getItem('appSettings')
+  const settingsStr = localStorage.getItem('appSettings')
   try { return settingsStr ? JSON.parse(settingsStr) : null } catch { return null }
 }
 

@@ -2,7 +2,6 @@ import path from 'path'
 import { prisma } from '../../database'
 import { AppError } from '../../middleware/errorHandler'
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const pdfmake = require('pdfmake')
 
 function getFontPath(name: string): string {

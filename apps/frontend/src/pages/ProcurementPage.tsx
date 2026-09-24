@@ -134,7 +134,6 @@ export function ProcurementPage() {
       const bank1100 = all.find((a: Account) => a.code === '1100')
       if (bank1100) setBankAccounts(all.filter((a: Account) => a.parentId === bank1100.id))
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const refreshSelected = async (id: string) => {

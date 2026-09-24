@@ -12,7 +12,7 @@ import { DEFAULT_ACCOUNTS } from '@waterpax/types'
 const logger = createChildLogger('finance:service')
 
 const ACCOUNT_CACHE: Map<string, Account> = new Map()
-let cacheTimestamp = 0
+const cacheTimestamp = 0
 const CACHE_TTL_MS = 60_000
 
 function cacheKey(code: string): string {
@@ -401,7 +401,7 @@ export const financeService = {
 
     const payablesAccount = await financeRepository.findAccountByCode('2000')
     let payablesTotal = 0
-    let supplierCount = 0
+    const supplierCount = 0
 
     if (payablesAccount) {
       const balance = await financeRepository.getAccountBalance(payablesAccount.id)
@@ -450,7 +450,7 @@ export const financeService = {
     const startMonth = from.getMonth()
     const endYear = to.getFullYear()
     const endMonth = to.getMonth()
-    let cursor = new Date(startYear, startMonth, 1)
+    const cursor = new Date(startYear, startMonth, 1)
     while (cursor <= to) {
       const periodStart = new Date(cursor)
       const periodEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59)

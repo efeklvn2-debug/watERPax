@@ -964,7 +964,7 @@ export const salesService = {
       const creditNoteNumber = `${prefix}${String(lastNum + 1).padStart(3, '0')}`
 
       // Resolve batchNumber from allocation
-      let batchNumber: string | null = null
+      let batchNumber: string | null
       const allocation = (saleLine.allocation as unknown as SaleLineAllocation[] | null) || []
       let allocationMissing = false
       let allocationReconstructed = false

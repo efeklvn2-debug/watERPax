@@ -9,14 +9,19 @@
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "eslint .",
     "db:generate": "npm run db:generate --workspace=@waterpax/backend",
     "db:push": "npm run db:push --workspace=@waterpax/backend",
     "db:seed": "npm run db:seed --workspace=@waterpax/backend"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
     "prisma": "^5.22.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.70.1"
   },
   "engines": {
     "node": ">=20.0.0"
