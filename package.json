@@ -1,0 +1,27 @@
+{
+  "name": "waterpax",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace=@waterpax/backend",
+    "db:push": "npm run db:push --workspace=@waterpax/backend",
+    "db:seed": "npm run db:seed --workspace=@waterpax/backend"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  }
+}

@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  typecheck-build:
+    name: Typecheck & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build @waterpax/types
+        working-directory: packages/types
+        run: npm run build
+
+      - name: Typecheck backend
+        working-directory: apps/backend
+        run: npx tsc --noEmit
+
+      - name: Typecheck frontend
+        working-directory: apps/frontend
+        run: npx tsc --noEmit
+
+      - name: Generate Prisma client
+        working-directory: apps/backend
+        run: npx prisma generate
+
+      - name: Build backend
+        working-directory: apps/backend
+        run: npm run build
+
+      - name: Build frontend
+        working-directory: apps/frontend
+        run: npm run build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: apps/frontend/dist
+          if-no-files-found: error
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist
+          path: apps/backend/dist
+          if-no-files-found: error
+
+  smoke:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: typecheck-build
+    env:
+      DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres?schema=public
+      JWT_SECRET: ${{ secrets.CI_JWT_SECRET || 'ci-only-jwt-secret-not-used-in-prod' }}
+      ADMIN_PASSWORD: ${{ secrets.CI_ADMIN_PASSWORD || 'CiAdmin_2026!' }}
+      BASE_URL: http://127.0.0.1:3001/api
+      SMOKE_USER: superadmin
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build @waterpax/types
+        working-directory: packages/types
+        run: npm run build
+
+      - name: Generate Prisma client
+        working-directory: apps/backend
+        run: npx prisma generate
+
+      - name: Push schema
+        working-directory: apps/backend
+        run: npx prisma db push --skip-generate
+
+      - name: Seed database
+        working-directory: apps/backend
+        run: npx prisma db seed
+
+      - name: Build backend (test server)
+        working-directory: apps/backend
+        run: npm run build
+
+      - name: Start backend and wait for health
+        working-directory: apps/backend
+        run: |
+          nohup node dist/index.js > /tmp/backend.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3001/api/health > /dev/null 2>&1; then
+              echo "backend healthy after ${i}x2s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "backend failed to become healthy"
+          cat /tmp/backend.log
+          exit 1
+
+      - name: Run smoke suite
+        run: BASE_URL=${{ env.BASE_URL }} SMOKE_USER=${{ env.SMOKE_USER }} node scripts/smoke-test.mjs
+
+      - name: Run MTS flow E2E
+        run: BASE_URL=${{ env.BASE_URL }} node scripts/mts-flow.e2e.mjs
+
+      - name: Run Guide Angel E2E
+        run: BASE_URL=${{ env.BASE_URL }} node scripts/guide-angel.e2e.mjs
+
+      - name: Run period-lock E2E
+        run: BASE_URL=${{ env.BASE_URL }} node scripts/period-lock.e2e.mjs

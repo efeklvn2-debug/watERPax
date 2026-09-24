@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+coverage/
+*.tgz
+*.tsbuildinfo
+scripts/.2fa-secrets.json
+nul
+apps/frontend/vite.config.ts.timestamp-*.mjs

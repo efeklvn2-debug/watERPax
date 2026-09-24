@@ -1,0 +1,4 @@
+-- AlterTable: Stock.quantity INTEGER -> DOUBLE PRECISION
+ALTER TABLE "Stock" ALTER COLUMN "quantity" TYPE DOUBLE PRECISION;
+-- AlterTable: StockMovement.quantity INTEGER -> DOUBLE PRECISION
+ALTER TABLE "StockMovement" ALTER COLUMN "quantity" TYPE DOUBLE PRECISION;
