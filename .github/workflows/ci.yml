@@ -121,6 +121,8 @@ jobs:
 
       - name: Start backend and wait for health
         working-directory: apps/backend
+        env:
+          PORT: 3001
         run: |
           nohup node dist/index.js > /tmp/backend.log 2>&1 &
           for i in $(seq 1 30); do
