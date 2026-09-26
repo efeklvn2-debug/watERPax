@@ -112,6 +112,25 @@ async function run() {
   assert(!!cashAcct, 'Cash account (1000) exists')
   assert(!!obeAcct, 'OBE account (3000) exists')
 
+  // 3b. Anchor the ledger's earliest date before locking — on a fresh DB the
+  // future-dated entry in step 6 would otherwise become the earliest and make
+  // step 8's backdated entry fail INVALID_DATE (cannot post before earliest).
+  log('\n--- Step 3b: Anchor earliest journal date ---')
+  const yesterday0 = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+  const anchorRes = await session.api('/finance/journal', {
+    method: 'POST',
+    body: {
+      description: 'Earliest entry anchor',
+      sourceModule: 'ADJUSTMENT',
+      date: yesterday0,
+      lines: [
+        { accountId: cashAcct.id, debit: 300, credit: 0 },
+        { accountId: obeAcct.id, debit: 0, credit: 300 }
+      ]
+    }
+  })
+  assert(anchorRes.status === 201, `Anchor entry posted (${anchorRes.status})`)
+
   // 4. Lock books starting from today
   log('\n--- Step 4: Lock books ---')
   const today = new Date().toISOString().split('T')[0]
@@ -180,6 +199,7 @@ async function run() {
     }
   })
   assert(jeAfterRes.status === 201, `Backdated JE succeeds after unlock (${jeAfterRes.status})`)
+  if (jeAfterRes.status !== 201) log(`  Message: ${jeAfterRes.data?.error?.message}`)
 
   // Summary
   log('\n═══════════════════════════════')
