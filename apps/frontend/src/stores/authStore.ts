@@ -29,6 +29,7 @@ interface AuthState {
   completeLogin: () => Promise<boolean>
   logout: () => Promise<void>
   checkAuth: () => Promise<void>
+  refreshSession: () => Promise<void>
   clearError: () => void
 }
 
@@ -124,6 +125,28 @@ export const useAuthStore = create<AuthState>()(
           }
         } catch (err) {
           set({ user: null, permissions: [], isAuthenticated: false, isLoading: false })
+        }
+      },
+
+      // Refresh user + permissions without clearing the session on transient
+      // failures. Callers use this to pick up permission changes (e.g. a
+      // permission added after login) without forcing a logout.
+      refreshSession: async () => {
+        try {
+          const response = await authApi.me()
+          if (!response.data) return
+          const userData = (response.data as any).data
+          const permRes = await authApi.myPermissions()
+          if (!permRes.data) return
+          set({
+            user: userData,
+            permissions: (permRes.data as any)?.data ?? [],
+            isAuthenticated: true,
+            isLoading: false,
+            error: null
+          })
+        } catch {
+          // Keep existing session on transient errors
         }
       },
 

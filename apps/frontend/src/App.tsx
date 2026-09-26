@@ -26,8 +26,10 @@ function ProtectedRoute({ children, requiredPermissions, requiredRole }: { child
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const { isAuthenticated, checkAuth } = useAuthStore.getState()
-    ;(isAuthenticated ? Promise.resolve() : checkAuth())
+    const { isAuthenticated, checkAuth, refreshSession } = useAuthStore.getState()
+    // Always revalidate: when already logged in, refresh user + permissions
+    // (permissions granted after login would otherwise stay stale in localStorage).
+    ;(isAuthenticated ? refreshSession() : checkAuth())
       .finally(() => {
         setOk(useAuthStore.getState().isAuthenticated)
         setLoading(false)
