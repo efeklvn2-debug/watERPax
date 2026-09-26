@@ -14,7 +14,7 @@ function envFromFile(path, key) {
   }
 }
 
-const ADMIN_USER = process.env.SMOKE_USER || process.env.PERIOD_LOCK_USER || 'superadmin'
+const ADMIN_USER = process.env.PERIOD_LOCK_USER || 'admin'
 const ADMIN_PASS = process.env.PASSWORD
   || process.env.SUPERADMIN_PASSWORD
   || envFromFile('apps/backend/.env', 'ADMIN_PASSWORD')

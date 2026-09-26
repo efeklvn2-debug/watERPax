@@ -15,10 +15,13 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
 
 const results = []
 function log(m) { console.log(m) }
-function assert(pass, message) {
+function assert(pass, message, detail) {
   results.push({ pass: !!pass, message })
   log(`${pass ? '  ✓' : '  ✗'} ${message}`)
-  if (!pass) throw new Error(message)
+  if (!pass) {
+    if (detail !== undefined) log(`  detail: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`)
+    throw new Error(message)
+  }
 }
 
 function createSession() {
@@ -134,7 +137,11 @@ async function main() {
   r = await admin.api('/sales', {
     method: 'POST', body: { customerId, lines: [{ variantId, qty: 6, unitPrice: 1700 }] },
   })
-  assert(r.status === 201 && r.data?.data?.lines?.[0]?.unitPrice === 1700, 'Draft with discounted price')
+  assert(
+    r.status === 201 && Number(r.data?.data?.lines?.[0]?.unitPrice) === 1700,
+    'Draft with discounted price',
+    { status: r.status, unitPrice: r.data?.data?.lines?.[0]?.unitPrice, error: r.data?.error }
+  )
   const saleId = r.data?.data?.id
   r = await admin.api(`/sales/${saleId}/confirm`, { method: 'POST', body: {} })
   assert(r.status === 200, 'Sale confirmed')

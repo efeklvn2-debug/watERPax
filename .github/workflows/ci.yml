@@ -146,4 +146,4 @@ jobs:
         run: BASE_URL=${{ env.BASE_URL }} node scripts/guide-angel.e2e.mjs
 
       - name: Run period-lock E2E
-        run: BASE_URL=${{ env.BASE_URL }} node scripts/period-lock.e2e.mjs
+        run: BASE_URL=${{ env.BASE_URL }} PERIOD_LOCK_USER=admin node scripts/period-lock.e2e.mjs
