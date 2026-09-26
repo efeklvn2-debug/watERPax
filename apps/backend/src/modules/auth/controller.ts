@@ -6,6 +6,7 @@ import { sendError } from '../../middleware/errorHandler'
 import { Role } from '@waterpax/types'
 import { auditService } from '../audit'
 import { setAuthCookies, setAccessTokenCookie, clearAuthCookies, getRefreshTokenFromCookie } from '../../cookies'
+import { ensureCsrfCookie } from '../../middleware/csrf'
 
 export const authController = {
   async login(req: Request, res: Response, next: NextFunction) {
@@ -53,6 +54,7 @@ export const authController = {
       }
       const tokens = await authService.refreshToken(refreshToken)
       setAccessTokenCookie(req, res, tokens.accessToken, tokens.refreshToken)
+      ensureCsrfCookie(req, res)
       res.status(200).json({ data: { accessTokenExpiresIn: 15 * 60 } })
     } catch (error) {
       sendError(res, error, 'auth.refreshToken')

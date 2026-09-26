@@ -66,9 +66,20 @@ function attemptRefresh(): Promise<'ok' | 'invalid' | 'transient'> {
 client.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _csrfRetry?: boolean }
 
     const isAuthPath = originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/2fa/')
+
+    if (
+      error.response?.status === 403 &&
+      !originalRequest._csrfRetry &&
+      (error.response.data as any)?.error?.code === 'CSRF_INVALID'
+    ) {
+      originalRequest._csrfRetry = true
+      if (getCsrfTokenFromCookie()) {
+        return client(originalRequest)
+      }
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthPath) {
       originalRequest._retry = true

@@ -15,6 +15,7 @@ const CSRF_EXEMPT_PATHS = [
 
 export function csrfProtection(req: Request, res: Response, next: NextFunction) {
   if (SAFE_METHODS.has(req.method)) {
+    ensureCsrfCookie(req, res)
     return next()
   }
 
@@ -24,6 +25,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
   }
 
   if (!verifyCsrf(req)) {
+    setCsrfCookie(res, req)
     return next(new AppError(403, 'CSRF_INVALID', 'CSRF token missing or invalid'))
   }
 
@@ -36,5 +38,7 @@ function ensureCsrfCookie(req: Request, res: Response) {
     setCsrfCookie(res, req)
   }
 }
+
+export { ensureCsrfCookie }
 
 export { CSRF_HEADER_NAME }
