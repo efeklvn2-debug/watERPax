@@ -47,9 +47,19 @@ export const waterReportsService = {
         value
       }
     })
-    const packs = rows.reduce((s, r) => s + (r.packs as number), 0)
-    const value = round2(rows.reduce((s, r) => s + (r.value as number), 0))
-    return { meta: {}, rows, totals: { packs, value } }
+    // Sellable vs defective split — only FG_STORE packs are available for sale.
+    const sellableRows = rows.filter(r => r.location === 'FG_STORE')
+    const defectiveRows = rows.filter(r => r.location === 'FG_DEFECTIVE')
+    return {
+      meta: {},
+      rows,
+      totals: {
+        packs: sellableRows.reduce((s, r) => s + (r.packs as number), 0),
+        value: round2(sellableRows.reduce((s, r) => s + (r.value as number), 0)),
+        defectivePacks: defectiveRows.reduce((s, r) => s + (r.packs as number), 0),
+        defectiveValue: round2(defectiveRows.reduce((s, r) => s + (r.value as number), 0))
+      }
+    }
   },
 
   /** FG grouped by product → variant. Includes zero-stock active variants. */
@@ -85,9 +95,14 @@ export const waterReportsService = {
           variants: []
         })
       }
-      const totalPacks = v.fgStocks.reduce((s, st) => s + st.quantity, 0)
-      const totalValue = round2(v.fgStocks.reduce((s, st) => s + st.quantity * Number(st.unitCost), 0))
+      // Sellable (FG_STORE) vs defective (FG_DEFECTIVE) split per variant.
+      const storeStocks = v.fgStocks.filter(st => st.location === 'FG_STORE')
+      const defectiveStocks = v.fgStocks.filter(st => st.location === 'FG_DEFECTIVE')
+      const totalPacks = storeStocks.reduce((s, st) => s + st.quantity, 0)
+      const totalValue = round2(storeStocks.reduce((s, st) => s + st.quantity * Number(st.unitCost), 0))
       const unitCost = totalPacks > 0 ? round2(totalValue / totalPacks) : 0
+      const defectivePacks = defectiveStocks.reduce((s, st) => s + st.quantity, 0)
+      const defectiveValue = round2(defectiveStocks.reduce((s, st) => s + st.quantity * Number(st.unitCost), 0))
       const batches = v.fgStocks.map(st => ({
         variant: v.label,
         product: p.name,
@@ -105,6 +120,8 @@ export const waterReportsService = {
         packs: totalPacks,
         unitCost,
         value: totalValue,
+        defectivePacks,
+        defectiveValue,
         batches
       })
     }
@@ -113,10 +130,12 @@ export const waterReportsService = {
     const allVariants = rows.flatMap(r => r.variants)
     const totalPacks = allVariants.reduce((s: number, v: any) => s + v.packs, 0)
     const totalValue = round2(allVariants.reduce((s: number, v: any) => s + v.value, 0))
+    const totalDefectivePacks = allVariants.reduce((s: number, v: any) => s + (v.defectivePacks || 0), 0)
+    const totalDefectiveValue = round2(allVariants.reduce((s: number, v: any) => s + (v.defectiveValue || 0), 0))
     return {
       meta: { category: filters?.category || null, productId: filters?.productId || null, variantId: filters?.variantId || null },
       rows,
-      totals: { packs: totalPacks, value: totalValue }
+      totals: { packs: totalPacks, value: totalValue, defectivePacks: totalDefectivePacks, defectiveValue: totalDefectiveValue }
     }
   },
 
