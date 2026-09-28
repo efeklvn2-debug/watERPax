@@ -472,6 +472,8 @@ model CustomerCreditNote {
   reason           String
   disposition      CustomerCreditDisposition
   refundMethod     CustomerRefundMethod       @default(CREDIT)
+  arSettled        Decimal                    @default(0) @db.Decimal(12, 2) // portion applied to open invoice AR (1200)
+  advanceCredited  Decimal                    @default(0) @db.Decimal(12, 2) // portion credited to 2250 as usable advance
   date             DateTime                   @default(now())
   notes            String?
   batchNumber      String? // FG batch returned to (from SaleLine.allocation)

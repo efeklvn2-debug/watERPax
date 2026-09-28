@@ -1,15 +1,23 @@
 // watERPax Customer Return (defective inward) E2E
 // Tests: RESTOCK → FG_STORE, SCRAP → FG_DEFECTIVE, CREDIT/CASH, qty guard, RBAC, TB
+// Also: AR settlement on unpaid sales, advance pooling + auto-apply, SCRAP write-off (5320),
+//       zero-cost restore (stock restored even when line unitCost = 0)
 
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:3001/api'
 
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+
 function envFromFile(path, key) {
   try {
-    const { readFileSync } = require('fs')
     const m = readFileSync(path, 'utf8').match(new RegExp(`^${key}=(.*)$`, 'm'))
     return m ? m[1].trim().replace(/^"|"$/g, '') : undefined
   } catch { return undefined }
 }
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = envFromFile('apps/backend/.env', 'DATABASE_URL')
+}
+const require2 = createRequire(import.meta.url)
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
   || process.env.SUPERADMIN_PASSWORD
   || envFromFile('apps/backend/.env', 'ADMIN_PASSWORD')
@@ -239,6 +247,120 @@ async function main() {
   assert(r.status === 403, `Viewer blocked (got ${r.status})`)
   r = await viewer.api('/sales/credit-notes')
   assert(r.status === 200, `Viewer list allowed (got ${r.status})`)
+
+  // ========== 8. New cashflow invariants (AR settlement, advance auto-apply, SCRAP write-off, zero-cost restore)
+  log('\n8. AR settlement — CREDIT on UNPAID sale settles 1200, no phantom advance')
+  const near = (a, b) => Math.abs(Number(a) - Number(b)) <= 0.01
+  // Fresh customer with no deposits, so the sale stays genuinely unpaid on delivery.
+  r = await admin.api('/customers', { method: 'POST', body: { name: `CRET AR Customer ${ts}`, code: `CRETAR-${ts}` } })
+  assert(r.status === 201, 'AR customer created')
+  const arCustomerId = r.data?.data?.id
+  r = await admin.api('/sales', { method: 'POST', body: { customerId: arCustomerId, lines: [{ variantId, qty: 1 }] } })
+  assert(r.status === 201, 'Unpaid sale created')
+  const unpaidSaleId = r.data?.data?.id
+  r = await admin.api(`/sales/${unpaidSaleId}/confirm`, { method: 'POST', body: {} })
+  assert(r.status === 200, 'Unpaid sale confirmed')
+  r = await admin.api(`/sales/${unpaidSaleId}/deliver`, { method: 'POST', body: {} })
+  assert(r.status === 200, 'Unpaid sale delivered')
+  let bal = await admin.api(`/customers/${arCustomerId}/balance`)
+  const heldBeforeAr = Number(bal.data?.data?.depositHeld || 0)
+  r = await admin.api('/sales/credit-notes', { method: 'POST', body: { customerId: arCustomerId, saleId: unpaidSaleId, variantId, quantity: 1, reason: 'Unpaid return', disposition: 'RESTOCK', refundMethod: 'CREDIT', date: today } })
+  assert(r.status === 201, `Unpaid CREDIT created (got ${r.status}) ${r.status !== 201 ? JSON.stringify(r.data) : ''}`)
+  const crAr = r.data?.data
+  assert(Number(crAr.arSettled) > 0, `arSettled > 0 (got ${crAr.arSettled})`)
+  assert(Number(crAr.advanceCredited) === 0, `advanceCredited 0 when AR absorbed (got ${crAr.advanceCredited})`)
+  r = await admin.api(`/sales/${unpaidSaleId}`)
+  const unpaidDue = Number(r.data?.data?.invoices?.[0]?.balanceDue)
+  const unpaidStatus = r.data?.data?.invoices?.[0]?.status
+  assert(near(unpaidDue, 0), `Invoice balanceDue settled to 0 (got ${unpaidDue})`)
+  assert(unpaidStatus === 'PAID', `Invoice status PAID (got ${unpaidStatus})`)
+  bal = await admin.api(`/customers/${arCustomerId}/balance`)
+  assert(near(bal.data?.data?.depositHeld, heldBeforeAr), `depositHeld unchanged (${heldBeforeAr} -> ${bal.data?.data?.depositHeld})`)
+  r = await admin.api('/finance/journal?sourceModule=SALES_RETURN&limit=30')
+  const arJe = (r.data?.data || []).find((j) => j.reference === crAr.creditNoteNumber && j.lines.some((l) => findAccountCode(l) === '1200'))
+  assert(!!arJe, 'Cr1200 AR settlement line in JE')
+
+  log('\n8b. CREDIT on paid sale -> usable advance, auto-applied on next delivery')
+  r = await admin.api('/sales', { method: 'POST', body: { customerId: arCustomerId, lines: [{ variantId, qty: 1 }] } })
+  assert(r.status === 201, 'Paid-mode sale created')
+  const advSaleId = r.data?.data?.id
+  await admin.api(`/sales/${advSaleId}/confirm`, { method: 'POST', body: {} })
+  await admin.api(`/sales/${advSaleId}/deliver`, { method: 'POST', body: {} })
+  r = await admin.api(`/sales/${advSaleId}/payments`, { method: 'POST', body: { amount: Number(saleLine.unitPrice), method: 'CASH', date: today } })
+  assert(r.status === 201 || r.status === 200, `Payment on adv sale (got ${r.status})`)
+  bal = await admin.api(`/customers/${arCustomerId}/balance`)
+  const heldBeforeAdv = Number(bal.data?.data?.depositHeld || 0)
+  r = await admin.api('/sales/credit-notes', { method: 'POST', body: { customerId: arCustomerId, saleId: advSaleId, variantId, quantity: 1, reason: 'Advance credit', disposition: 'RESTOCK', refundMethod: 'CREDIT', date: today } })
+  assert(r.status === 201, `Paid-sale CREDIT created (got ${r.status})`)
+  const crAdv = r.data?.data
+  assert(Number(crAdv.advanceCredited) > 0, `advanceCredited > 0 (got ${crAdv.advanceCredited})`)
+  bal = await admin.api(`/customers/${arCustomerId}/balance`)
+  const heldAfterAdv = Number(bal.data?.data?.depositHeld || 0)
+  assert(near(heldAfterAdv, heldBeforeAdv + Number(crAdv.advanceCredited)), `depositHeld grew by credit (${heldBeforeAdv} -> ${heldAfterAdv})`)
+  r = await admin.api('/sales', { method: 'POST', body: { customerId: arCustomerId, lines: [{ variantId, qty: 1 }] } })
+  const autoSaleId = r.data?.data?.id
+  await admin.api(`/sales/${autoSaleId}/confirm`, { method: 'POST', body: {} })
+  r = await admin.api(`/sales/${autoSaleId}/deliver`, { method: 'POST', body: {} })
+  assert(r.status === 200, 'Next sale delivered')
+  r = await admin.api(`/sales/${autoSaleId}`)
+  assert(r.data?.data?.status === 'COMPLETED', `Advance auto-applied, sale COMPLETED (got ${r.data?.data?.status})`)
+  bal = await admin.api(`/customers/${arCustomerId}/balance`)
+  assert(Number(bal.data?.data?.depositHeld) < heldAfterAdv, `depositHeld consumed (${heldAfterAdv} -> ${bal.data?.data?.depositHeld})`)
+
+  log('\n8c. SCRAP write-off — Dr5320/Cr1325 JE')
+  r = await admin.api('/sales', { method: 'POST', body: { customerId: arCustomerId, lines: [{ variantId, qty: 2 }] } })
+  assert(r.status === 201, 'Scrap-mode sale created')
+  const scrapSaleId = r.data?.data?.id
+  r = await admin.api(`/sales/${scrapSaleId}/confirm`, { method: 'POST', body: {} })
+  assert(r.status === 200, `Scrap sale confirmed (got ${r.status}) ${r.status !== 200 ? JSON.stringify(r.data) : ''}`)
+  r = await admin.api(`/sales/${scrapSaleId}/deliver`, { method: 'POST', body: {} })
+  assert(r.status === 200, `Scrap sale delivered (got ${r.status}) ${r.status !== 200 ? JSON.stringify(r.data) : ''}`)
+  r = await admin.api(`/sales/${scrapSaleId}/payments`, { method: 'POST', body: { amount: Number(saleLine.unitPrice) * 2, method: 'CASH', date: today } })
+  assert(r.status === 201 || r.status === 200, `Payment on scrap sale (got ${r.status}) ${r.status !== 201 && r.status !== 200 ? JSON.stringify(r.data) : ''}`)
+  r = await admin.api('/sales/credit-notes', { method: 'POST', body: { customerId: arCustomerId, saleId: scrapSaleId, variantId, quantity: 1, reason: 'Scrap write-off', disposition: 'SCRAP', refundMethod: 'CASH', date: today } })
+  assert(r.status === 201, `Scrap CREDIT created (got ${r.status})`)
+  const crScr = r.data?.data
+  r = await admin.api('/finance/journal?sourceModule=SALES_RETURN&limit=40')
+  const woJe = (r.data?.data || []).find((j) => j.reference === crScr.creditNoteNumber && j.lines.some((l) => findAccountCode(l) === '5320'))
+  if (!woJe) log(`  DEBUG JEs for ${crScr.creditNoteNumber}: ${JSON.stringify((r.data?.data || []).filter((j) => j.reference === crScr.creditNoteNumber).map((j) => ({ ref: j.reference, lines: j.lines.map((l) => ({ code: findAccountCode(l), d: l.debit, c: l.credit })) })), null, 2)}`)
+  assert(!!woJe, 'Dr5320 write-off JE found')
+  if (woJe) {
+    const drDmg = woJe.lines.find((l) => findAccountCode(l) === '5320')
+    const crFg = woJe.lines.find((l) => findAccountCode(l) === '1325')
+    assert(Number(drDmg?.debit) > 0, 'Dr5320 > 0')
+    assert(Number(crFg?.credit) > 0, 'Cr1325 > 0')
+  }
+
+  log('\n8d. Zero-cost batch — stock restored even when line unitCost = 0')
+  // No API path yields unitCost 0 (materials cost >= 0.01, empty BOM blocked), so
+  // inject a zero-cost FG batch directly — the legacy/data-gap shape fix 3 targets.
+  r = await admin.api('/products', { method: 'POST', body: { code: `CRPROD0-${ts}`, name: 'CRET Free Water', category: 'BOTTLED' } })
+  assert(r.status === 201, 'Zero-cost product created')
+  const prod0Id = r.data?.data?.id
+  r = await admin.api(`/products/${prod0Id}/variants`, { method: 'POST', body: { label: 'CRET-0cl', packSize: 12, pricePerUnit: 1200 } })
+  assert(r.status === 201, 'Zero-cost variant created')
+  const variant0Id = r.data?.data?.id
+  const { PrismaClient } = require2('@prisma/client')
+  const prisma = new PrismaClient()
+  try {
+    await prisma.finishedGoodStock.create({
+      data: { tenantId, variantId: variant0Id, batchNumber: `ZB-${ts}`, location: 'FG_STORE', quantity: 10, unitCost: 0 }
+    })
+  } finally {
+    await prisma.$disconnect()
+  }
+  assert(true, 'Zero-cost FG batch injected (qty 10, unitCost 0)')
+  r = await admin.api('/sales', { method: 'POST', body: { customerId: arCustomerId, lines: [{ variantId: variant0Id, qty: 2 }] } })
+  assert(r.status === 201, 'Zero-cost sale created')
+  const zcSaleId = r.data?.data?.id
+  await admin.api(`/sales/${zcSaleId}/confirm`, { method: 'POST', body: {} })
+  r = await admin.api(`/sales/${zcSaleId}/deliver`, { method: 'POST', body: {} })
+  assert(r.status === 200, `Zero-cost sale delivered (got ${r.status}) ${r.status !== 200 ? JSON.stringify(r.data) : ''}`)
+  r = await admin.api('/sales/credit-notes', { method: 'POST', body: { customerId: arCustomerId, saleId: zcSaleId, variantId: variant0Id, quantity: 1, reason: 'Zero cost return', disposition: 'RESTOCK', refundMethod: 'CREDIT', date: today } })
+  assert(r.status === 201, `Zero-cost CREDIT created (got ${r.status}) ${r.status !== 201 ? JSON.stringify(r.data) : ''}`)
+  r = await admin.api('/reports/water/fg-valuation')
+  const zcPacks = (r.data?.data?.rows || []).filter((x) => x.location === 'FG_STORE' && x.variant === 'CRET-0cl').reduce((s, x) => s + Number(x.packs), 0)
+  assert(zcPacks === 9, `Zero-cost FG_STORE restored to 9 of 10 (got ${zcPacks})`)
 
   // ========== 7. Trial balance
   log('\n7. Trial balance balanced')
