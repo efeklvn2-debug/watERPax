@@ -231,7 +231,7 @@ export function SalesPaymentsTab() {
                     </td>
                     <td className="px-4 py-3 text-slate-600">{p.customer?.name || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{p.sale?.saleNumber || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{p.paymentMethod === 'BANK_TRANSFER' ? 'Transfer' : 'Cash'}</td>
+                    <td className="px-4 py-3 text-slate-600">{p.transactionType === 'DEPOSIT_APPLIED' || p.paymentMethod === 'DEPOSIT' ? 'Deposit' : p.paymentMethod === 'BANK_TRANSFER' ? 'Transfer' : 'Cash'}</td>
                     <td className="px-4 py-3 text-right font-medium text-green-600">{money(p.amount)}</td>
                     <td className="px-4 py-3 text-slate-500">{p.referenceNumber || '—'}</td>
                     <td className="px-4 py-3 text-center">

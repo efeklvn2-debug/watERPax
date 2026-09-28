@@ -559,6 +559,7 @@ export const salesService = {
 
         const advanceAccountId = await getAccountId(tx, ADVANCE_ACCOUNT)
         const arAccountId = await getAccountId(tx, AR_ACCOUNT)
+        const appliedRef = `DEP-APPLIED-${(invoice as any).invoiceNumber}`
         await financeService.postJournalEntry(
           {
             description: `Deposit applied — ${(invoice as any).invoiceNumber}`,
@@ -574,6 +575,33 @@ export const salesService = {
           },
           tx
         )
+
+        // Ledger rows for the deposit-funded portion — without these the payments
+        // list only shows the cash leg of a deposit-settled sale.
+        await tx.paymentTransaction.create({
+          data: {
+            saleId: sale.id,
+            customerId: sale.customerId,
+            transactionType: 'DEPOSIT_APPLIED',
+            paymentMethod: 'DEPOSIT',
+            amount: advanceApplied,
+            referenceNumber: appliedRef,
+            notes: 'Applied from customer advance deposit',
+            receivedById: opts.userId,
+            tenantId: requireTenantId()
+          }
+        })
+
+        await tx.paymentReceived.create({
+          data: {
+            invoiceId: invoice.id,
+            amount: advanceApplied,
+            reference: appliedRef,
+            notes: 'Applied from customer advance deposit',
+            paymentMethod: 'Deposit applied',
+            tenantId: requireTenantId()
+          }
+        })
       }
 
       let delivered = await tx.sale.update({
