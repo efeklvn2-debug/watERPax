@@ -384,7 +384,7 @@ export function SalesInvoicesTab() {
                       <div key={pt.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5 text-xs">
                         <div>
                           <span className="font-medium">{money(pt.amount)}</span>
-                          <span className="text-slate-500 ml-1.5">{pt.paymentMethod === 'BANK_TRANSFER' ? 'Transfer' : 'Cash'}</span>
+                          <span className="text-slate-500 ml-1.5">{pt.transactionType === 'DEPOSIT_APPLIED' || pt.paymentMethod === 'DEPOSIT' ? 'Deposit' : pt.paymentMethod === 'BANK_TRANSFER' ? 'Transfer' : 'Cash'}</span>
                           <span className="text-slate-400 ml-1.5">{new Date(pt.receivedAt).toLocaleDateString()}</span>
                         </div>
                         {receipt && (

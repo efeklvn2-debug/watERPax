@@ -755,6 +755,7 @@ enum MTATransactionType {
 enum MTAPaymentMethod {
   CASH
   BANK_TRANSFER
+  DEPOSIT
 }
 
 enum MTAInvoiceStatus {
