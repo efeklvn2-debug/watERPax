@@ -10,7 +10,7 @@ function unwrap<T>(response: { data?: T } | undefined): T | undefined {
 }
 
 const REPORTS = [
-  { name: 'fg-valuation', label: 'FG Valuation', dated: false, hint: 'Finished packs on hand, valued at batch cost' },
+  { name: 'fg-valuation', label: 'FG Valuation', dated: false, hint: 'Finished packs on hand, valued at batch cost — totals cover sellable (FG_STORE) packs; defective batches listed per row' },
   { name: 'production-output', label: 'Production Output', dated: true, hint: 'Completed runs grouped by variant' },
   { name: 'waste', label: 'Waste by Component', dated: true, hint: 'Recorded waste per material' },
   { name: 'variance', label: 'Variance: Procured vs Realised', dated: true, hint: 'Procured IN vs consumed vs theoretical vs unexplained' },

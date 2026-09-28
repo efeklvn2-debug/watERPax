@@ -41,6 +41,8 @@ interface FgGroupedVariant {
   packs: number
   unitCost: number
   value: number
+  defectivePacks: number
+  defectiveValue: number
   batches: FgRow[]
 }
 
@@ -80,6 +82,8 @@ export function InventoryPage() {
   const [fgGrouped, setFgGrouped] = useState<FgGroupedProduct[]>([])
   const [fgValue, setFgValue] = useState(0)
   const [fgTotalPacks, setFgTotalPacks] = useState(0)
+  const [fgDefectivePacks, setFgDefectivePacks] = useState(0)
+  const [fgDefectiveValue, setFgDefectiveValue] = useState(0)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [adjustMaterial, setAdjustMaterial] = useState<MaterialWithStock | null>(null)
@@ -120,6 +124,8 @@ export function InventoryPage() {
         setFgGrouped(payload?.rows || [])
         setFgValue(Number(payload?.totals?.value || 0))
         setFgTotalPacks(Number(payload?.totals?.packs || 0))
+        setFgDefectivePacks(Number(payload?.totals?.defectivePacks || 0))
+        setFgDefectiveValue(Number(payload?.totals?.defectiveValue || 0))
       }
     } else {
       const res = await reportsApi.getWaterReport('fg-valuation')
@@ -129,6 +135,8 @@ export function InventoryPage() {
         setFgRows(payload?.rows || [])
         setFgValue(Number(payload?.totals?.value || 0))
         setFgTotalPacks(Number(payload?.totals?.packs || 0))
+        setFgDefectivePacks(Number(payload?.totals?.defectivePacks || 0))
+        setFgDefectiveValue(Number(payload?.totals?.defectiveValue || 0))
       }
     }
     setLoading(false)
@@ -225,17 +233,15 @@ export function InventoryPage() {
   )
 
   const renderFgGrouped = () => {
-    const defectivePacks = fgGrouped.flatMap(g => g.variants).flatMap((v: any) => v.batches).filter((b: any) => b.location === 'FG_DEFECTIVE').reduce((s: number, b: any) => s + b.packs, 0)
-    const defectiveValue = fgGrouped.flatMap(g => g.variants).flatMap((v: any) => v.batches).filter((b: any) => b.location === 'FG_DEFECTIVE').reduce((s: number, b: any) => s + b.value, 0)
     return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200">
       <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h2 className="font-semibold text-slate-800 text-sm">Finished Goods Store</h2>
-          {defectivePacks > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">{defectivePacks.toLocaleString()} defective ({money(defectiveValue)})</span>}
+          {fgDefectivePacks > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">{fgDefectivePacks.toLocaleString()} defective ({money(fgDefectiveValue)})</span>}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-500">{fgTotalPacks.toLocaleString()} packs</span>
+          <span className="text-xs text-slate-500">{fgTotalPacks.toLocaleString()} packs sellable</span>
           <span className="text-sm font-medium text-blue-700">{money(fgValue)}</span>
         </div>
       </div>
@@ -280,6 +286,11 @@ export function InventoryPage() {
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CATEGORY_COLORS[group.category] || 'bg-slate-100 text-slate-600'}`}>
                   {group.category}
                 </span>
+                {group.variants.reduce((s, v) => s + v.defectivePacks, 0) > 0 && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">
+                    {group.variants.reduce((s, v) => s + v.defectivePacks, 0).toLocaleString()} defective
+                  </span>
+                )}
                 <span className="text-xs text-slate-400 ml-auto">
                   {group.variants.reduce((s, v) => s + v.packs, 0).toLocaleString()} packs
                 </span>
@@ -287,7 +298,7 @@ export function InventoryPage() {
               {/* Variant rows */}
               {group.variants.map(v => {
                 const isExpanded = expandedVariant === v.variantId
-                const isZero = v.packs === 0
+                const isZero = v.packs === 0 && !(v.defectivePacks > 0)
                 return (
                   <div key={v.variantId}>
                     <div
@@ -299,6 +310,11 @@ export function InventoryPage() {
                       <span className="text-xs text-slate-400 w-20">x{v.packSize}</span>
                       <span className={`text-right flex-1 font-medium text-sm ${isZero ? 'text-slate-300' : 'text-slate-800'}`}>
                         {v.packs.toLocaleString()}
+                        {v.defectivePacks > 0 && (
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-medium align-middle">
+                            {v.defectivePacks.toLocaleString()} defective
+                          </span>
+                        )}
                       </span>
                       <span className="text-right w-28 text-sm text-slate-500">{isZero ? '—' : money(v.unitCost)}</span>
                       <span className={`text-right w-28 font-medium text-sm ${isZero ? 'text-slate-300' : 'text-slate-800'}`}>
@@ -351,9 +367,12 @@ export function InventoryPage() {
   const renderFgBatches = () => (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200">
       <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between">
-        <h2 className="font-semibold text-slate-800 text-sm">Finished packs at FG_STORE</h2>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-500">{fgTotalPacks.toLocaleString()} packs</span>
+          <h2 className="font-semibold text-slate-800 text-sm">Finished packs at FG_STORE</h2>
+          {fgDefectivePacks > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">{fgDefectivePacks.toLocaleString()} defective ({money(fgDefectiveValue)})</span>}
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500">{fgTotalPacks.toLocaleString()} packs sellable</span>
           <span className="text-sm font-medium text-blue-700">{money(fgValue)}</span>
         </div>
       </div>
