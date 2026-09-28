@@ -76,7 +76,7 @@ const ADJUSTMENT_REASONS = [
 export function InventoryPage() {
   const notify = useNotification()
   const { booksLockedUntil } = useBooksLocked()
-  const [activeTab, setActiveTab] = useState<TabType>('raw')
+  const [activeTab, setActiveTab] = useState<TabType>('fg')
   const [materials, setMaterials] = useState<MaterialWithStock[]>([])
   const [fgRows, setFgRows] = useState<FgRow[]>([])
   const [fgGrouped, setFgGrouped] = useState<FgGroupedProduct[]>([])
