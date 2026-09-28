@@ -119,8 +119,14 @@ export const customersService = {
       where: { customerId },
       _sum: { depositApplied: true }
     })
+    // Credit-note residuals credited to 2250 are usable advances.
+    const creditNoteAdvances = await prisma.customerCreditNote.aggregate({
+      where: { customerId },
+      _sum: { advanceCredited: true }
+    })
     const depositHeld = Number(standaloneDeposits._sum.amount || 0)
       + Number(openingDeposits._sum.amount || 0)
+      + Number(creditNoteAdvances._sum.advanceCredited || 0)
       - Number(appliedOnInvoices._sum.depositApplied || 0)
 
     return {
@@ -171,6 +177,11 @@ export const customersService = {
       _sum: { depositApplied: true }
     })
 
+    const creditNoteAdvances = await prisma.customerCreditNote.groupBy({
+      by: ['customerId'],
+      _sum: { advanceCredited: true }
+    })
+
     const openingReceivables = await prisma.guideAngelOpeningBalance.groupBy({
       by: ['customerId'],
       where: { type: 'CUSTOMER_RECEIVABLE' },
@@ -182,6 +193,7 @@ export const customersService = {
     const openingMap = new Map(openingDeposits.map(d => [d.customerId, d]))
     const appliedMap = new Map(appliedDeposits.map(d => [d.customerId, d]))
     const receivableMap = new Map(openingReceivables.map(d => [d.customerId, d]))
+    const cnAdvanceMap = new Map(creditNoteAdvances.map(d => [d.customerId, d]))
 
     return customers.map(c => {
       const inv = invoiceMap.get(c.id)
@@ -189,6 +201,7 @@ export const customersService = {
       const opn = openingMap.get(c.id)
       const app = appliedMap.get(c.id)
       const rec = receivableMap.get(c.id)
+      const cna = cnAdvanceMap.get(c.id)
 
       const recTotal = Number(rec?._sum.amount || 0)
       const recSettled = Number(rec?._sum.settledAmount || 0)
@@ -197,7 +210,10 @@ export const customersService = {
       const totalInvoiced = Number(inv?._sum.totalAmount || 0) + recTotal
       const totalPaid = Number(inv?._sum.amountPaid || 0) + recSettled
       const balanceDue = Number(inv?._sum.balanceDue || 0) + recOpen
-      const depositHeld = Number(dep?._sum.amount || 0) + Number(opn?._sum.amount || 0) - Number(app?._sum.depositApplied || 0)
+      const depositHeld = Number(dep?._sum.amount || 0)
+        + Number(opn?._sum.amount || 0)
+        + Number(cna?._sum.advanceCredited || 0)
+        - Number(app?._sum.depositApplied || 0)
 
       return {
         customerId: c.id,

@@ -20,6 +20,7 @@ const COGS_ACCOUNT = '5000'
 const CASH_ACCOUNT = '1000'
 const BANK_ACCOUNT = '1100'
 const ADVANCE_ACCOUNT = '2250'
+const DAMAGED_GOODS_ACCOUNT = '5320'
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 
@@ -131,8 +132,14 @@ async function availableAdvance(tx: any, customerId: string): Promise<number> {
     where: { customerId },
     _sum: { depositApplied: true }
   })
+  // Credit-note residuals credited to 2250 are usable advances ("advance for next order").
+  const creditNoteAdvances = await tx.customerCreditNote.aggregate({
+    where: { customerId },
+    _sum: { advanceCredited: true }
+  })
   return Number(standaloneDeposits._sum.amount || 0)
     + Number(openingDeposits._sum.amount || 0)
+    + Number(creditNoteAdvances._sum.advanceCredited || 0)
     - Number(appliedOnInvoices._sum.depositApplied || 0)
 }
 
@@ -488,19 +495,22 @@ export const salesService = {
           })
         }
       }
-      const cogsJe = await financeService.postJournalEntry(
-        {
-          description: `COGS for sale ${sale.saleNumber}`,
-          sourceModule: 'SALES',
-          sourceId: sale.id,
-          reference: sale.saleNumber,
-          postedById: opts.userId,
-          date: input.date,
-          lines: cogsLines
-        },
-        tx
-      )
-      journalEntryIds.push(cogsJe.id)
+      // Skip zero-value COGS JE (zero-cost lines) — a single-line JE would be rejected.
+      if (cogsTotal > 0.005) {
+        const cogsJe = await financeService.postJournalEntry(
+          {
+            description: `COGS for sale ${sale.saleNumber}`,
+            sourceModule: 'SALES',
+            sourceId: sale.id,
+            reference: sale.saleNumber,
+            postedById: opts.userId,
+            date: input.date,
+            lines: cogsLines
+          },
+          tx
+        )
+        journalEntryIds.push(cogsJe.id)
+      }
 
       // --- Invoice (one per sale).
       const totalQty = sale.lines.reduce((s, l) => s + l.qty, 0)
@@ -933,12 +943,13 @@ export const salesService = {
       const vatAmount = round2(vat)
 
       // Refund account
+      const refundMethod = input.refundMethod || 'CREDIT'
       let refundAccountId: string
       let refundMethodForJE: string
-      if (input.refundMethod === 'CASH') {
+      if (refundMethod === 'CASH') {
         refundAccountId = await getAccountId(tx, CASH_ACCOUNT)
         refundMethodForJE = 'Cash'
-      } else if (input.refundMethod === 'BANK') {
+      } else if (refundMethod === 'BANK') {
         if (input.bankAccountId) {
           const bank = await tx.account.findFirst({ where: { id: input.bankAccountId, isActive: true }, select: { id: true } })
           if (!bank) throw new AppError(404, 'NOT_FOUND', 'Bank account not found')
@@ -951,6 +962,19 @@ export const salesService = {
         refundAccountId = await getAccountId(tx, ADVANCE_ACCOUNT)
         refundMethodForJE = 'Credit'
       }
+
+      // AR settlement: the return first relieves whatever the customer still owes
+      // on this sale's open invoices. Only the residual leaves via the refund
+      // account (2250/1000/1100) — prevents cash payouts against uncollected AR
+      // and phantom advances while the receivable is still open.
+      const arAccountId = await getAccountId(tx, AR_ACCOUNT)
+      const openInvoices = (sale.invoices as any[] || [])
+        .filter((i: any) => i.status !== 'CANCELLED' && Number(i.balanceDue) > 0.005)
+        .sort((a: any, b: any) => new Date(a.issuedAt ?? a.createdAt).getTime() - new Date(b.issuedAt ?? b.createdAt).getTime())
+      const openDue = round2(openInvoices.reduce((s: number, i: any) => s + Number(i.balanceDue), 0))
+      const arSettled = round2(Math.min(totalInclusive, openDue))
+      const residual = round2(totalInclusive - arSettled)
+      const advanceCredited = refundMethod === 'CREDIT' ? residual : 0
 
       // Generate CR number
       const year = new Date().getFullYear()
@@ -1013,7 +1037,9 @@ export const salesService = {
           exVatAmount,
           reason: input.reason,
           disposition: input.disposition,
-          refundMethod: input.refundMethod || 'CREDIT',
+          refundMethod,
+          arSettled,
+          advanceCredited,
           date: dateFromInput(input.date),
           notes: input.notes || null,
           batchNumber,
@@ -1022,7 +1048,7 @@ export const salesService = {
         }
       })
 
-      // --- JE 1: Revenue reversal Dr Rev (exVAT) + Dr VAT / Cr RefundAccount (2250/1000/1100)
+      // --- JE 1: Revenue reversal Dr Rev (exVAT) + Dr VAT / Cr AR (open due) + Cr RefundAccount (2250/1000/1100 residual)
       const revenueLines: { accountId: string; debit: number; credit: number; memo: string }[] = []
       if (exVatAmount > 0.005) {
         revenueLines.push({ accountId: await getAccountId(tx, revenueCode), debit: exVatAmount, credit: 0, memo: `Sales return ${creditNoteNumber} — ${variant.label}` })
@@ -1030,7 +1056,12 @@ export const salesService = {
       if (vatAmount > 0.005) {
         revenueLines.push({ accountId: await getAccountId(tx, VAT_OUTPUT), debit: vatAmount, credit: 0, memo: `VAT reversal ${creditNoteNumber}` })
       }
-      revenueLines.push({ accountId: refundAccountId, debit: 0, credit: totalInclusive, memo: `${refundMethodForJE} credit ${creditNoteNumber}` })
+      if (arSettled > 0.005) {
+        revenueLines.push({ accountId: arAccountId, debit: 0, credit: arSettled, memo: `AR settled against ${sale.saleNumber}` })
+      }
+      if (residual > 0.005) {
+        revenueLines.push({ accountId: refundAccountId, debit: 0, credit: residual, memo: `${refundMethodForJE} credit ${creditNoteNumber}` })
+      }
 
       await financeService.postJournalEntry(
         {
@@ -1045,12 +1076,31 @@ export const salesService = {
         tx
       )
 
+      // Settle open invoices FIFO by the AR-relieved portion.
+      let remainingSettle = arSettled
+      for (const inv of openInvoices) {
+        if (remainingSettle <= 0.005) break
+        const due = Number(inv.balanceDue)
+        const apply = round2(Math.min(due, remainingSettle))
+        const newDue = round2(due - apply)
+        await tx.invoice.update({
+          where: { id: inv.id },
+          data: {
+            amountPaid: round2(Number(inv.amountPaid) + apply),
+            balanceDue: newDue,
+            status: newDue <= 0.005 ? 'PAID' : 'PARTIAL',
+            ...(newDue <= 0.005 ? { paidAt: dateFromInput(input.date) } : {})
+          }
+        })
+        remainingSettle = round2(remainingSettle - apply)
+      }
+
       // --- JE 2 + Stock: COGS reversal + FG increment
       const cogsAmount = round2(input.quantity * unitCost)
-      if (cogsAmount > 0.005) {
-        const location = input.disposition === 'RESTOCK' ? 'FG_STORE' : 'FG_DEFECTIVE'
-        const fgAccountId = await getAccountId(tx, fgCode)
+      const location = input.disposition === 'RESTOCK' ? 'FG_STORE' : 'FG_DEFECTIVE'
+      const fgAccountId = await getAccountId(tx, fgCode)
 
+      if (cogsAmount > 0.005) {
         // Post COGS JE: Dr FG / Cr COGS (sales return restores inventory)
         await financeService.postJournalEntry(
           {
@@ -1068,27 +1118,48 @@ export const salesService = {
           tx
         )
 
-        // Increment FinishedGoodStock at the disposition location
-        await tx.finishedGoodStock.upsert({
-          where: {
-            tenantId_variantId_batchNumber_location: {
-              tenantId,
-              variantId: input.variantId,
-              batchNumber: batchNumber!,
-              location
-            }
-          } as any,
-          update: { quantity: { increment: input.quantity } },
-          create: {
+        // SCRAP: write the restored FG straight back off — damaged goods are not
+        // an asset. Dr 5320 Damaged Goods / Cr FG keeps the P&L loss recognized.
+        if (input.disposition === 'SCRAP') {
+          await financeService.postJournalEntry(
+            {
+              description: `Scrap write-off — ${creditNoteNumber} — ${variant.label} x${input.quantity}`,
+              sourceModule: 'SALES_RETURN' as any,
+              sourceId: creditNote.id,
+              reference: creditNoteNumber,
+              postedById: opts.userId,
+              date: input.date,
+              lines: [
+                { accountId: await getAccountId(tx, DAMAGED_GOODS_ACCOUNT), debit: cogsAmount, credit: 0, memo: `Damaged goods write-off ${creditNoteNumber}` },
+                { accountId: fgAccountId, debit: 0, credit: cogsAmount, memo: `FG ${location} write-off ${creditNoteNumber}` }
+              ]
+            },
+            tx
+          )
+        }
+      }
+
+      // Stock restore is unconditional — quantity tracking must not depend on
+      // the line's unit cost (zero-cost returns still come back physically).
+      await tx.finishedGoodStock.upsert({
+        where: {
+          tenantId_variantId_batchNumber_location: {
+            tenantId,
             variantId: input.variantId,
             batchNumber: batchNumber!,
-            location,
-            quantity: input.quantity,
-            unitCost,
-            tenantId
-          } as any
-        })
-      }
+            location
+          }
+        } as any,
+        update: { quantity: { increment: input.quantity } },
+        create: {
+          variantId: input.variantId,
+          batchNumber: batchNumber!,
+          location,
+          quantity: input.quantity,
+          unitCost,
+          tenantId
+        } as any
+      })
 
 await auditService.record({
         userId: opts.userId,
@@ -1103,7 +1174,9 @@ await auditService.record({
           quantity: input.quantity,
           amount: totalInclusive,
           disposition: input.disposition,
-          refundMethod: input.refundMethod,
+          refundMethod,
+          arSettled,
+          advanceCredited,
           batchNumber,
           allocationMissing,
           allocationReconstructed
