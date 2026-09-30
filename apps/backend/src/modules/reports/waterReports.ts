@@ -7,6 +7,8 @@ const logger = createChildLogger('reports:water')
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 
+const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
 function parseRange(from?: string, to?: string): { gte?: Date; lte?: Date } {
   const range: { gte?: Date; lte?: Date } = {}
   if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) range.gte = dateStartOfDay(from)
@@ -139,11 +141,19 @@ export const waterReportsService = {
     }
   },
 
-  /** Completed output grouped by variant. */
-  async productionOutput(from?: string, to?: string): Promise<ReportResult> {
+  /** Completed output grouped by variant. Optional product/category filter. */
+  async productionOutput(from?: string, to?: string, filters?: { category?: string; productId?: string }): Promise<ReportResult> {
     const range = parseRange(from, to)
     const runs = await prisma.productionRun.findMany({
-      where: { status: 'COMPLETED', ...(range.gte || range.lte ? { completedAt: range } : {}) },
+      where: {
+        status: 'COMPLETED',
+        ...(range.gte || range.lte ? { completedAt: range } : {}),
+        ...(filters?.productId
+          ? { variant: { productId: filters.productId } }
+          : filters?.category
+            ? { variant: { product: { category: filters.category as any } } }
+            : {})
+      },
       include: { variant: { include: { product: true } } },
       orderBy: { completedAt: 'desc' }
     })
@@ -179,7 +189,27 @@ export const waterReportsService = {
       packagingCost: round2(rows.reduce((s, r) => s + r.packagingCost, 0)),
       totalCost: round2(rows.reduce((s, r) => s + r.totalCost, 0))
     }
-    return { meta: { from: from || null, to: to || null }, rows, totals }
+
+    // Daily output trend (gap days filled with zero) for time-series charts.
+    const trendMap = new Map<string, number>()
+    for (const run of runs) {
+      if (!run.completedAt) continue
+      const key = dayKey(run.completedAt)
+      trendMap.set(key, (trendMap.get(key) || 0) + (run.actualPacks || 0))
+    }
+    const trend: { date: string; packs: number }[] = []
+    if (trendMap.size > 0) {
+      const keys = [...trendMap.keys()].sort()
+      const cursor = new Date(`${keys[0]}T00:00:00`)
+      const end = new Date(`${keys[keys.length - 1]}T00:00:00`)
+      while (cursor <= end) {
+        const key = dayKey(cursor)
+        trend.push({ date: key, packs: trendMap.get(key) || 0 })
+        cursor.setDate(cursor.getDate() + 1)
+      }
+    }
+
+    return { meta: { from: from || null, to: to || null, trend }, rows, totals }
   },
 
   /** Recorded waste grouped by component material. */
@@ -302,14 +332,20 @@ export const waterReportsService = {
     }
   },
 
-  /** Delivered sales grouped by variant SKU (invoice date basis). */
-  async salesBySku(from?: string, to?: string): Promise<ReportResult> {
+  /** Delivered sales grouped by variant SKU (invoice date basis). Optional product/category filter. */
+  async salesBySku(from?: string, to?: string, filters?: { category?: string; productId?: string }): Promise<ReportResult> {
     const range = parseRange(from, to)
+    const variantFilter = filters?.productId
+      ? { productId: filters.productId }
+      : filters?.category
+        ? { product: { category: filters.category as any } }
+        : undefined
     const invoices = await prisma.invoice.findMany({
       where: {
         status: { not: 'CANCELLED' },
         ...(range.gte || range.lte ? { issuedAt: range } : {}),
-        saleId: { not: null }
+        saleId: { not: null },
+        ...(variantFilter ? { sale: { lines: { some: { variant: variantFilter } } } } : {})
       },
       include: {
         sale: {
@@ -319,11 +355,19 @@ export const waterReportsService = {
       orderBy: { issuedAt: 'desc' }
     })
     const bySku = new Map<string, any>()
+    const salesTrendMap = new Map<string, number>()
     for (const inv of invoices) {
       const sale: any = inv.sale
       if (!sale) continue
       for (const line of sale.lines) {
         const v: any = line.variant
+        if (variantFilter && !v) continue
+        if (filters?.productId && v?.productId !== filters.productId) continue
+        if (!filters?.productId && filters?.category && v?.product?.category !== filters.category) continue
+        if (inv.issuedAt) {
+          const key = dayKey(inv.issuedAt)
+          salesTrendMap.set(key, (salesTrendMap.get(key) || 0) + line.qty)
+        }
         if (!bySku.has(line.variantId)) {
           bySku.set(line.variantId, {
             variant: v?.label || '',
@@ -346,8 +390,22 @@ export const waterReportsService = {
       .map(r => ({ ...r, grossProfit: round2(r.revenueExVat - r.cogs) }))
       .sort((a, b) => b.revenueExVat - a.revenueExVat)
     const sum = (k: string) => round2(rows.reduce((s, r) => s + r[k], 0))
+
+    // Daily packs-sold trend (gap days filled with zero) for time-series charts.
+    const trend: { date: string; packs: number }[] = []
+    if (salesTrendMap.size > 0) {
+      const keys = [...salesTrendMap.keys()].sort()
+      const cursor = new Date(`${keys[0]}T00:00:00`)
+      const end = new Date(`${keys[keys.length - 1]}T00:00:00`)
+      while (cursor <= end) {
+        const key = dayKey(cursor)
+        trend.push({ date: key, packs: salesTrendMap.get(key) || 0 })
+        cursor.setDate(cursor.getDate() + 1)
+      }
+    }
+
     return {
-      meta: { from: from || null, to: to || null, basis: 'invoice issuedAt; COGS at captured line unitCost' },
+      meta: { from: from || null, to: to || null, basis: 'invoice issuedAt; COGS at captured line unitCost', trend },
       rows,
       totals: {
         packs: rows.reduce((s, r) => s + r.packs, 0),
@@ -469,13 +527,13 @@ export async function runWaterReport(
     case 'fg-grouped':
       return waterReportsService.fgGrouped({ category: query.category, productId: query.productId, variantId: query.variantId })
     case 'production-output':
-      return waterReportsService.productionOutput(query.from, query.to)
+      return waterReportsService.productionOutput(query.from, query.to, { category: query.category, productId: query.productId })
     case 'waste':
       return waterReportsService.wasteByComponent(query.from, query.to)
     case 'variance':
       return waterReportsService.variance(query.from, query.to)
     case 'sales-by-sku':
-      return waterReportsService.salesBySku(query.from, query.to)
+      return waterReportsService.salesBySku(query.from, query.to, { category: query.category, productId: query.productId })
     case 'low-raw':
       return waterReportsService.lowRaw()
   }
