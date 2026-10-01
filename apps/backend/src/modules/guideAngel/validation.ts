@@ -24,6 +24,11 @@ const stockItemSchema = z.object({
   quantity: nonNegative
 })
 
+const fgItemSchema = z.object({
+  variantId: z.string().trim().min(1),
+  quantity: z.number().int().min(0)
+})
+
 export const guideAngelDraftSchema = z.object({
   goLiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Go-live date is required'),
   cashBalance: nonNegative,
@@ -35,6 +40,7 @@ export const guideAngelDraftSchema = z.object({
   customerBalances: z.array(customerBalanceSchema).max(5000),
   supplierBalances: z.array(supplierBalanceSchema).max(5000),
   stockItems: z.array(stockItemSchema).max(5000),
+  fgItems: z.array(fgItemSchema).max(5000).default([]),
   supportReason: z.string().trim().max(500).optional()
 })
 

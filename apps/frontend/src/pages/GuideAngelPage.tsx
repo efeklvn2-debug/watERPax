@@ -4,7 +4,7 @@ import { Layout } from '../components/Layout'
 import { useNotification } from '../contexts/NotificationContext'
 import {
   guideAngelApi, GuideAngelCustomerRow, GuideAngelData, GuideAngelDraft,
-  GuideAngelSession, GuideAngelStockRow, GuideAngelSummary
+  GuideAngelSession, GuideAngelStockRow, GuideAngelSummary, GuideAngelVariantRow
 } from '../api/guideAngel'
 import { todayLocal } from '../utils/dates'
 
@@ -13,7 +13,7 @@ const today = todayLocal()
 const emptyDraft: GuideAngelDraft = {
   goLiveDate: today, cashBalance: 0, bankAccounts: [], loans: 0,
   fixedAssets: 0, accumulatedDepreciation: 0, ownerCapital: 0,
-  customerBalances: [], supplierBalances: [], stockItems: []
+  customerBalances: [], supplierBalances: [], stockItems: [], fgItems: []
 }
 
 function unwrap<T>(response: { data?: T } | undefined): T | undefined {
@@ -68,7 +68,7 @@ export function GuideAngelPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
-  const [data, setData] = useState<GuideAngelData>({ customers: [], suppliers: [], materials: [] })
+  const [data, setData] = useState<GuideAngelData>({ customers: [], suppliers: [], materials: [], variants: [] })
 
   const updateStockItem = (materialId: string, updater: (s: { materialId: string; quantity: number }) => { materialId: string; quantity: number }) => {
     const existing = draft.stockItems.filter(s => s.materialId !== materialId)
@@ -83,6 +83,21 @@ export function GuideAngelPage() {
   const addStockMaterial = (materialId: string) => {
     if (draft.stockItems.some(s => s.materialId === materialId)) return
     setDraft({ ...draft, stockItems: [...draft.stockItems, { materialId, quantity: 0 }] })
+  }
+
+  const updateFgItem = (variantId: string, updater: (s: { variantId: string; quantity: number }) => { variantId: string; quantity: number }) => {
+    const existing = draft.fgItems.filter(s => s.variantId !== variantId)
+    const current = draft.fgItems.find(s => s.variantId === variantId) || { variantId, quantity: 0 }
+    setDraft({ ...draft, fgItems: [...existing, updater(current)] })
+  }
+
+  const removeFgItem = (variantId: string) => {
+    setDraft({ ...draft, fgItems: draft.fgItems.filter(s => s.variantId !== variantId) })
+  }
+
+  const addFgVariant = (variantId: string) => {
+    if (draft.fgItems.some(s => s.variantId === variantId)) return
+    setDraft({ ...draft, fgItems: [...draft.fgItems, { variantId, quantity: 0 }] })
   }
 
   useEffect(() => {
@@ -165,6 +180,14 @@ export function GuideAngelPage() {
 
   const unusedMaterials = data.materials.filter(m => !draft.stockItems.some(s => s.materialId === m.id))
 
+  const fgRows: GuideAngelVariantRow[] = draft.fgItems.map(item => {
+    const v = data.variants.find(v => v.id === item.variantId)
+    return { id: item.variantId, label: v?.label || '', packSize: v?.packSize || 0, unitOfMeasure: v?.unitOfMeasure || '', productName: v?.productName || '', productCode: v?.productCode || '', category: v?.category || '', unitCost: v?.unitCost || 0, quantity: item.quantity }
+  })
+
+  const unusedVariants = data.variants.filter(v => !draft.fgItems.some(s => s.variantId === v.id))
+  const productsReady = data.variants.length > 0
+
   return (
     <Layout>
       <div className="max-w-5xl mx-auto">
@@ -172,9 +195,16 @@ export function GuideAngelPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">WatERPax</p>
             <h1 className="text-2xl font-bold text-slate-800 mt-1">Guide Angel</h1>
-            <p className="text-sm text-slate-500 mt-1">Add customers, suppliers, and materials first in their respective pages. Then come here for opening balances.</p>
+            <p className="text-sm text-slate-500 mt-1">Add customers, suppliers, materials, and products first in their respective pages. Then come here for opening balances.</p>
           </div>
         </div>
+
+        {!productsReady && (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            <p className="font-semibold">Create your products first</p>
+            <p className="mt-1">Guide Angel pulls opening finished-goods packs from your product variants. <button onClick={() => navigate('/products')} className="font-medium text-blue-700 underline">Go to Products</button> to add at least one product variant, then return here.</p>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-1">
           {steps.map((label, index) => (
@@ -285,6 +315,48 @@ export function GuideAngelPage() {
             )}
 
             {draft.stockItems.length === 0 && <div className="text-center py-12 text-slate-400">Add a material from the dropdown above to enter stock quantities.</div>}
+
+            <h2 className="text-lg font-semibold text-slate-800 mt-10">Finished goods on ground (packs)</h2>
+            <p className="text-sm text-slate-500 mt-1 mb-2">For each product variant, enter the packs on hand at go-live date. Valued from the variant's bill of materials.</p>
+
+            {draft.fgItems.length > 0 && <div className="space-y-5 mb-6">
+              {fgRows.map((item) => {
+                return (
+                  <div key={item.id} className="border border-slate-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <span className="font-semibold text-slate-700">{item.productName} — {item.label}</span>
+                        <span className="text-slate-400 text-xs ml-2">x{item.packSize} {item.unitOfMeasure}</span>
+                        <span className="text-slate-400 text-xs ml-2">Cost: {money(item.unitCost)}/pack</span>
+                        <span className="text-blue-600 text-xs ml-2 font-medium">Total: {item.quantity} packs ({money(item.quantity * item.unitCost)})</span>
+                      </div>
+                      <button onClick={() => removeFgItem(item.id)} className="text-xs text-red-600">Remove</button>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 text-sm">
+                        <span className="text-slate-500">Packs:</span>
+                        <input type="number" min="0" step="1" value={item.quantity || ''}
+                          onChange={e => updateFgItem(item.id, s => ({ ...s, quantity: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                          className="w-28 px-2 py-1.5 border border-slate-300 rounded text-sm outline-none" />
+                      </label>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>}
+
+            {unusedVariants.length > 0 && (
+              <div className="flex items-center gap-2">
+                <select onChange={e => { if (e.target.value) addFgVariant(e.target.value); e.target.value = '' }}
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none">
+                  <option value="">+ Add product variant...</option>
+                  {unusedVariants.map(v => <option key={v.id} value={v.id}>{v.productName} — {v.label} (x{v.packSize})</option>)}
+                </select>
+              </div>
+            )}
+
+            {draft.fgItems.length === 0 && <div className="text-center py-12 text-slate-400">Add a product variant from the dropdown above to enter packs on hand.</div>}
           </>}
 
           {step === 4 && <>
@@ -298,14 +370,14 @@ export function GuideAngelPage() {
               <div className="flex justify-between border-b border-slate-100 py-2"><span>Owner capital</span><strong>{money(summary?.ownerCapital)}</strong></div>
               <div className="flex justify-between border-b border-slate-100 py-2"><span>Opening balancing entry</span><strong>{money(Math.abs(summary?.openingEquity || 0))}</strong></div>
             </div>
-            <div className="mt-6 rounded-lg bg-blue-50 border border-blue-100 p-4 text-sm text-blue-800">Guide Angel will post one opening accounting record, create customer and supplier opening balances, and initialize your stock records. Do not enter pre-go-live finished goods in the Stock step — they stay off-book. When customers purchase them later, record the payments normally via Sales.</div>
+            <div className="mt-6 rounded-lg bg-blue-50 border border-blue-100 p-4 text-sm text-blue-800">Guide Angel will post one opening accounting record, create customer and supplier opening balances, and initialize your raw, packaging, and finished-goods stock records. Finished-goods packs are valued from each variant's bill of materials.</div>
           </>}
 
           <div className="flex justify-between mt-8 pt-5 border-t border-slate-100">
             <button onClick={() => step === 0 ? navigate('/') : setStep(s => s - 1)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">{step === 0 ? 'Cancel' : 'Back'}</button>
             <div className="flex gap-2">
               <button onClick={save} disabled={saving} className="px-4 py-2 text-sm text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50">{saving ? 'Saving...' : 'Save draft'}</button>
-              {step < 4 ? <button onClick={next} disabled={saving} className="px-5 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">Next</button>
+              {step < 4 ? <button onClick={next} disabled={saving || !productsReady} title={!productsReady ? 'Create at least one product variant first' : undefined} className="px-5 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">Next</button>
               : <button onClick={validateAndComplete} disabled={saving} className="px-5 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50">{saving ? 'Completing...' : 'Complete Guide Angel'}</button>}
             </div>
           </div>

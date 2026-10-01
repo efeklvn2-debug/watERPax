@@ -132,17 +132,15 @@ export const inventoryService = {
 
         const amount = quantity * Number(existing.costPrice)
         const inventoryAccountId = await financeService.getAccountIdByCode(existing.category === 'PACKAGING' ? '1510' : '1300')
-        const adjustmentAccountId = await financeService.getAccountIdByCode('5400')
         const isReturnToSupplier = reason === 'Return to Supplier'
-        const isOpeningBalance = reason === 'Opening Balance'
         const debitAccountId = isReturnToSupplier
           ? await financeService.getAccountIdByCode('2000')
-          : isIncrease
-            ? adjustmentAccountId
-            : await financeService.getAccountIdByCode(inventoryService.getExpenseAccountCode(reason))
-        const creditAccountId = isOpeningBalance
-          ? await financeService.getAccountIdByCode('3000')
-          : adjustmentAccountId
+          : await financeService.getAccountIdByCode(inventoryService.getExpenseAccountCode(reason))
+        // A stock increase has no expense behind it: credit Opening Balance Equity
+        // (same contra as the Guide Angel opening) — never 5400, an EXPENSE account.
+        // Crediting an expense account leaves it on the credit side forever, which
+        // is what broke the Balance Sheet tie-out (see CONTEXT.md known issue).
+        const creditAccountId = await financeService.getAccountIdByCode('3000')
         await financeService.postJournalEntry({
           description: `Stock ${isIncrease ? 'increase' : 'decrease'} — ${existing.name} (${existing.code}): ${currentQty} → ${newQuantity}. ${reason}`,
           sourceModule: 'ADJUSTMENT',

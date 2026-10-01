@@ -124,6 +124,7 @@ export const pricingService = {
       name: m.name,
       category: m.category,
       subCategory: m.subCategory,
+      unitOfMeasure: m.unitOfMeasure,
       minStock: m.minStock,
       isActive: m.isActive,
       costPrice: m.costPrice ? Number(m.costPrice) : null,

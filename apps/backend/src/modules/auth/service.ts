@@ -264,7 +264,7 @@ export const authService = {
     }
     const tokens = generateTokens(payload)
     await persistUserRefreshToken(user.id, user.tenantId, tokens.refreshToken)
-    logger.info({ userId: user.id, usedRecovery }, '2FA verification passed â€” user logged in')
+    logger.info({ userId: user.id, usedRecovery }, '2FA verification passed - user logged in')
 
     const fresh = await authRepository.findUserById(user.id)
     return { user: toUserResponse(fresh), tokens }
@@ -420,7 +420,7 @@ export const authService = {
     if (updated.count === 0) throw new AppError(404, 'NOT_FOUND', 'User not found')
     if (input.role !== undefined || input.isActive !== undefined) {
       await authRepository.deleteUserRefreshTokens(id)
-      logger.info({ userId: id, role: input.role }, 'User role/status change â€” refresh tokens cycled')
+      logger.info({ userId: id, role: input.role }, 'User role/status change - refresh tokens cycled')
     }
     const user = await authRepository.findUserById(id)
     return {

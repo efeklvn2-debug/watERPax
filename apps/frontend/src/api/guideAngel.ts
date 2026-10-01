@@ -16,10 +16,17 @@ export interface GuideAngelStockRow {
   quantity: number
 }
 
+export interface GuideAngelVariantRow {
+  id: string; label: string; packSize: number; unitOfMeasure: string
+  productName: string; productCode: string; category: string; unitCost: number
+  quantity: number
+}
+
 export interface GuideAngelData {
   customers: { id: string; name: string; code: string }[]
   suppliers: { id: string; name: string; code: string }[]
   materials: { id: string; code: string; name: string; category: string; unitOfMeasure: string; costPrice: number }[]
+  variants: { id: string; label: string; packSize: number; unitOfMeasure: string; productName: string; productCode: string; category: string; unitCost: number }[]
 }
 
 export interface GuideAngelDraft {
@@ -29,11 +36,12 @@ export interface GuideAngelDraft {
   customerBalances: { customerId: string; receivableAmount: number; depositAmount: number; jarBalance: number }[]
   supplierBalances: { supplierId: string; payableAmount: number }[]
   stockItems: { materialId: string; quantity: number }[]
+  fgItems: { variantId: string; quantity: number }[]
 }
 
 export interface GuideAngelSummary {
-  customerCount: number; supplierCount: number; stockCount: number
-  customerReceivables: number; customerDeposits: number; supplierPayables: number; stockValue: number
+  customerCount: number; supplierCount: number; stockCount: number; fgCount: number
+  customerReceivables: number; customerDeposits: number; supplierPayables: number; stockValue: number; fgValue: number
   cashBalance: number; bankBalance: number; loans: number; fixedAssets: number
   accumulatedDepreciation: number; ownerCapital: number
   totalDebits: number; totalCredits: number; balanced: boolean; openingEquity: number
