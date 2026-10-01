@@ -408,7 +408,13 @@ export const reportsService = {
     const asOfDateObj = asOfDate(asOf)
     const balances = await financeRepository.getAllAccountBalances(asOfDateObj)
 
+    // Balances are signed (debit positive). Never Math.abs() them: an account on
+    // the wrong side would be reported as if it were normal, and a loss would be
+    // presented as income — either way the sheet stops tying back to the GL.
+    // Assets are debit-normal (shown as-is); liabilities/equity are credit-normal
+    // (sign flipped for display).
     function buildSection(type: string): BalanceSheetSection {
+      const sign = type === 'ASSET' ? 1 : -1
       const accounts: BalanceSheetLine[] = balances
         .filter(b => b.accountType === type)
         .filter(b => Math.abs(b.balance) > 0.005)
@@ -416,48 +422,40 @@ export const reportsService = {
           accountId: b.accountId,
           accountCode: b.accountCode,
           accountName: b.accountName,
-          balance: Math.abs(b.balance)
+          balance: Math.round(b.balance * sign * 100) / 100
         }))
-      const total = accounts.reduce((s, a) => s + a.balance, 0)
+      const total = Math.round(accounts.reduce((s, a) => s + a.balance, 0) * 100) / 100
       return { type, accounts, total }
     }
 
     const assets = buildSection('ASSET')
     const liabilities = buildSection('LIABILITY')
 
-    const equityAccounts = balances.filter(b => b.accountType === 'EQUITY')
-    const revenueAccounts = balances.filter(b => b.accountType === 'REVENUE')
-    const expenseAccounts = balances.filter(b => b.accountType === 'EXPENSE')
-    const cogsAccounts = balances.filter(b => b.accountType === 'COGS')
+    // GL identity: Σassets + Σliabilities + Σequity + Σrevenue + Σcogs + Σexpenses = 0,
+    // so assets = (-liabilities) + (-equity) + (-(revenue + cogs + expenses)).
+    // With normal signs -(rev+cogs+exp) is revenue − cogs − expenses; with abnormal
+    // signs (e.g. a credit balance on an expense account) it stays tied to the GL.
+    const signedTotal = (types: string[]) =>
+      balances.filter(b => types.includes(b.accountType)).reduce((s, a) => s + Number(a.balance), 0)
+    const currentPeriodProfit =
+      Math.round(-signedTotal(['REVENUE', 'COGS', 'EXPENSE']) * 100) / 100
 
-    const totalRevenue = revenueAccounts.reduce((s, a) => s + Math.abs(a.balance), 0)
-    const totalExpenses = expenseAccounts.reduce((s, a) => s + Math.abs(a.balance), 0)
-    const totalCogs = cogsAccounts.reduce((s, a) => s + Math.abs(a.balance), 0)
-    const currentPeriodProfit = totalRevenue - totalCogs - totalExpenses
-
-    const equityLines: BalanceSheetLine[] = equityAccounts
-      .filter(b => Math.abs(b.balance) > 0.005)
-      .map(b => ({
-        accountId: b.accountId,
-        accountCode: b.accountCode,
-        accountName: b.accountName,
-        balance: Math.abs(b.balance)
-      }))
+    const equityLines: BalanceSheetLine[] = buildSection('EQUITY').accounts
 
     if (Math.abs(currentPeriodProfit) > 0.005) {
       equityLines.push({
         accountId: '__retained_earnings_current__',
-        accountCode: 'â€”',
+        accountCode: '',
         accountName: 'Current Period Earnings',
-        balance: Math.abs(currentPeriodProfit)
+        balance: currentPeriodProfit
       })
     }
 
-    const equityTotal = equityLines.reduce((s, a) => s + a.balance, 0)
+    const equityTotal = Math.round(equityLines.reduce((s, a) => s + a.balance, 0) * 100) / 100
     const equity: BalanceSheetSection = { type: 'EQUITY', accounts: equityLines, total: equityTotal }
 
     const totalAssets = assets.total
-    const totalLiabilitiesAndEquity = liabilities.total + equity.total
+    const totalLiabilitiesAndEquity = Math.round((liabilities.total + equity.total) * 100) / 100
 
     return {
       asOfDate: asOfDateObj.toISOString().split('T')[0],

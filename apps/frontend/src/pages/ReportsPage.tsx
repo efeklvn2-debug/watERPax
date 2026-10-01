@@ -528,7 +528,7 @@ function ProfitLossView({ data: rawData, from, to }: { data: ProfitRangeReport |
               </tr>
             </thead>
             <tbody>
-              {Object.entries(data.expenseBreakdown || {}).filter(([, v]) => v > 0).map(([key, amount]) => (
+              {Object.entries(data.expenseBreakdown || {}).filter(([, v]) => v !== 0).map(([key, amount]) => (
                 <tr key={key} className="border-b border-slate-100">
                   <td className="py-2">{key.replace(/([A-Z])/g, ' $1').trim()}</td>
                   <td className="text-right py-2 font-medium">{formatCurrency(amount)}</td>

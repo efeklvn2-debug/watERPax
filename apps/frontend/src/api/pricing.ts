@@ -12,6 +12,7 @@ export interface MaterialWithPrice {
   priceListId: string | null
   isActive?: boolean
   minStock?: number
+  unitOfMeasure?: string
 }
 
 export interface PriceListInput {

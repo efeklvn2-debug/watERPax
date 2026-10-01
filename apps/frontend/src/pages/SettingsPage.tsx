@@ -44,7 +44,8 @@ export function SettingsPage() {
 
   const [priceForm, setPriceForm] = useState({
     costPrice: 0,
-    minStock: 0
+    minStock: 0,
+    unitOfMeasure: 'kg'
   })
 
   useEffect(() => {
@@ -167,10 +168,11 @@ const loadSettings = async () => {
       setSaving(true)
 
       try {
-        // Save cost price + minStock using inventoryApi
+        // Save cost price + minStock + unit of measure using inventoryApi
         await inventoryApi.updateMaterial(selectedMaterial!.id, {
           costPrice: priceForm.costPrice || undefined,
-          minStock: priceForm.minStock || 0
+          minStock: priceForm.minStock || 0,
+          unitOfMeasure: priceForm.unitOfMeasure
         })
 
         loadMaterials()
@@ -186,7 +188,8 @@ const loadSettings = async () => {
     setSelectedMaterial(material)
     setPriceForm({
       costPrice: material.costPrice || 0,
-      minStock: material.minStock || 0
+      minStock: material.minStock || 0,
+      unitOfMeasure: material.unitOfMeasure || 'kg'
     })
     setShowPriceModal(true)
   }
@@ -924,6 +927,20 @@ const loadSettings = async () => {
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg"
                   />
                   <p className="text-xs text-slate-500 mt-1">Items below this level appear on the Low Stock dashboard</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Unit of Measure <span className="text-red-500">*</span></label>
+                  <select
+                    value={priceForm.unitOfMeasure}
+                    onChange={e => setPriceForm({...priceForm, unitOfMeasure: e.target.value})}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                  >
+                    <option value="kg">kg</option>
+                    <option value="liter">Liter</option>
+                    <option value="packs">Packs</option>
+                    <option value="pcs">Pieces (pcs)</option>
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">Standard unit for this material</p>
                 </div>
                 <div className="flex justify-end space-x-3 pt-4">
                   <button type="button" onClick={() => setShowPriceModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg">Cancel</button>

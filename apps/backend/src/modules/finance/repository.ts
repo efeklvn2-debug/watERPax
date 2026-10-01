@@ -3,6 +3,13 @@ import { prisma } from '../../database'
 import { AppError } from '../../middleware/errorHandler'
 import { Prisma } from '@prisma/client'
 
+// Signed netting: credit-normal accounts (revenue) net credits against debits,
+// debit-normal accounts (expense, COGS) net debits against credits. Both sides of
+// a reversal must reduce the total — a one-sided sum silently inflates profit and
+// stops P&L from tying back to the Balance Sheet (which reads signed balances).
+const netCredit = (sum) => (sum.credit ? Number(sum.credit) : 0) - (sum.debit ? Number(sum.debit) : 0)
+const netDebit = (sum) => (sum.debit ? Number(sum.debit) : 0) - (sum.credit ? Number(sum.credit) : 0)
+
 export const financeRepository = {
   async findAccountByCode(code: string) {
     return prisma.account.findFirst({ where: { code } })
@@ -210,9 +217,9 @@ export const financeRepository = {
           accountId: { in: salesAccounts.map(a => a.id) },
           journalEntry: { date: { gte: dateFrom, lte: dateTo } }
         },
-        _sum: { credit: true }
+        _sum: { credit: true, debit: true }
       })
-      result.sales = salesTotal._sum.credit ? Number(salesTotal._sum.credit) : 0
+      result.sales = netCredit(salesTotal._sum)
     }
 
     if (packingAccount) {
@@ -221,9 +228,9 @@ export const financeRepository = {
           accountId: packingAccount.id,
           journalEntry: { date: { gte: dateFrom, lte: dateTo } }
         },
-        _sum: { credit: true }
+        _sum: { credit: true, debit: true }
       })
-      result.packing = packingTotal._sum.credit ? Number(packingTotal._sum.credit) : 0
+      result.packing = netCredit(packingTotal._sum)
     }
 
     if (otherIncomeAccount) {
@@ -234,9 +241,7 @@ export const financeRepository = {
         },
         _sum: { credit: true, debit: true }
       })
-      const credits = otherTotal._sum.credit ? Number(otherTotal._sum.credit) : 0
-      const debits = otherTotal._sum.debit ? Number(otherTotal._sum.debit) : 0
-      result.otherIncome = credits - debits
+      result.otherIncome = netCredit(otherTotal._sum)
     }
 
     return result
@@ -257,9 +262,9 @@ export const financeRepository = {
           accountId: account.id,
           journalEntry: { date: { gte: dateFrom, lte: dateTo } }
         },
-        _sum: { debit: true }
+        _sum: { debit: true, credit: true }
       })
-      expenses[account.code] = result._sum.debit ? Number(result._sum.debit) : 0
+      expenses[account.code] = netDebit(result._sum)
     }
 
     return expenses
@@ -279,9 +284,9 @@ export const financeRepository = {
           accountId: cogsAccount.id,
           journalEntry: { date: { gte: dateFrom, lte: dateTo } }
         },
-        _sum: { debit: true }
+        _sum: { debit: true, credit: true }
       })
-      total += result._sum.debit ? Number(result._sum.debit) : 0
+      total += netDebit(result._sum)
     }
 
     for (const account of otherCogsAccounts) {
@@ -292,12 +297,12 @@ export const financeRepository = {
         },
         _sum: { debit: true, credit: true }
       })
-      const credits = result._sum.credit ? Number(result._sum.credit) : 0
-      const debits = result._sum.debit ? Number(result._sum.debit) : 0
-      total += debits - credits
+      total += netDebit(result._sum)
     }
 
-    return Math.max(0, total)
+    // Not clamped: a credit balance on a COGS account (FG restored on a cancelled
+    // sale, say) is real and must flow through, or P&L stops tying to the BS.
+    return total
   },
 
   async getCashFlow(dateFrom: Date, dateTo: Date) {

@@ -1,4 +1,6 @@
-// Guide Angel E2E — fresh tenant -> draft -> validate -> complete -> idempotent -> isolation.
+// Guide Angel E2E — fresh tenant -> products-first guard -> product/variant/BOM ->
+// draft (raw + FG packs) -> validate -> complete -> opening JE (1300/1311 + 1325/3000) ->
+// FG sellable -> idempotent -> isolation.
 // Mirrors scripts/smoke-test.mjs session/cookie/CSRF harness. Plain node, no deps.
 // Usage: BASE_URL=http://127.0.0.1:3001/api ADMIN_PASSWORD=... node scripts/guide-angel.e2e.mjs
 import { readFileSync } from 'fs'
@@ -107,6 +109,12 @@ async function run() {
   let tenantId = null
   let journalEntryId = null
   const goLiveDate = new Date().toISOString().slice(0, 10)
+  let customerId = null
+  let variantId = null
+  const FG_PACKS = 10
+  // BOM: 12 pcs x (1 + 2%) x costPrice 100 = 1224/pack -> 12240 for 10 packs
+  const FG_UNIT_COST = 1224
+  const FG_VALUE = FG_PACKS * FG_UNIT_COST
   const draft = {
     goLiveDate,
     cashBalance: 50000,
@@ -118,6 +126,7 @@ async function run() {
     customerBalances: [],
     supplierBalances: [],
     stockItems: [],
+    fgItems: [],
   }
 
   // 1. Superadmin login + fresh tenant + tenant ADMIN user
@@ -151,29 +160,65 @@ async function run() {
     assert(false, `Tenant admin login failed: ${e.message}`)
   }
 
-  // 3. Guide Angel data + minimal seed (1 material, 1 customer, 1 supplier)
+  // 3. Guide Angel data + minimal seed (1 material, 1 customer, 1 supplier).
+  // Products-first guard is verified BEFORE any variant exists.
   log('\n3. Guide Angel data & seed')
   try {
     const before = await tenantAdmin.api('/guide-angel/data')
     assert(before.status === 200, `GET /guide-angel/data returns 200 (got ${before.status})`)
+
+    const guarded = await tenantAdmin.api('/guide-angel/save', { method: 'POST', body: { draft } })
+    assert(guarded.status === 400, `Save without products returns 400 (got ${guarded.status})`)
+    assert(JSON.stringify(guarded.data).includes('SETUP_NO_PRODUCTS'), 'Guard code is SETUP_NO_PRODUCTS')
 
     const material = await tenantAdmin.api('/inventory/materials', {
       method: 'POST',
       body: { code: `GAMAT-${ts}`, name: 'GA Preform', category: 'RAW_MATERIAL', unitOfMeasure: 'pcs', costPrice: 100 },
     })
     assert(material.status === 201, `Material creation returns 201 (got ${material.status})`)
+    const materialId = material.data?.data?.id
+    assert(!!materialId, 'Material ID returned')
 
     const customer = await tenantAdmin.api('/customers', { method: 'POST', body: { name: 'GA Customer' } })
     assert(customer.status === 201, `Customer creation returns 201 (got ${customer.status})`)
+    customerId = customer.data?.data?.id
+    assert(!!customerId, 'Customer ID returned')
 
     const supplier = await tenantAdmin.api('/suppliers', { method: 'POST', body: { name: 'GA Supplier' } })
     assert(supplier.status === 201, `Supplier creation returns 201 (got ${supplier.status})`)
+
+    const product = await tenantAdmin.api('/products', {
+      method: 'POST',
+      body: { code: `GAPROD-${ts}`, name: 'GA Bottled Water', category: 'BOTTLED' },
+    })
+    assert(product.status === 201, `Product creation returns 201 (got ${product.status})`)
+    const productId = product.data?.data?.id
+    assert(!!productId, 'Product ID returned')
+
+    const variant = await tenantAdmin.api(`/products/${productId}/variants`, {
+      method: 'POST',
+      body: { label: '33cl', packSize: 12, unitOfMeasure: 'pack', pricePerUnit: 1800 },
+    })
+    assert(variant.status === 201, `Variant creation returns 201 (got ${variant.status})`)
+    variantId = variant.data?.data?.id
+    assert(!!variantId, 'Variant ID returned')
+
+    const bom = await tenantAdmin.api(`/products/variants/${variantId}/bom`, {
+      method: 'PUT',
+      body: { lines: [{ materialId, qtyPerPack: 12, wastagePct: 2 }] },
+    })
+    assert(bom.status === 200, `BOM replace returns 200 (got ${bom.status})`)
+
+    draft.fgItems = [{ variantId, quantity: FG_PACKS }]
 
     const after = await tenantAdmin.api('/guide-angel/data')
     const d = after.data?.data || {}
     assert(after.status === 200 && (d.materials || []).length >= 1, 'Materials present in data')
     assert((d.customers || []).length >= 1, 'Customers present in data')
     assert((d.suppliers || []).length >= 1, 'Suppliers present in data')
+    const gaVariant = (d.variants || []).find((v) => v.id === variantId)
+    assert(!!gaVariant, 'Variant present in guide-angel data')
+    assert(Number(gaVariant?.unitCost) === FG_UNIT_COST, `Variant unitCost is BOM-derived (${gaVariant?.unitCost}, want ${FG_UNIT_COST})`)
   } catch (e) {
     assert(false, `Seed failed: ${e.message}`)
   }
@@ -187,6 +232,7 @@ async function run() {
     const validate = await tenantAdmin.api('/guide-angel/validate', { method: 'POST', body: { draft } })
     assert(validate.status === 200, `POST /guide-angel/validate returns 200 (got ${validate.status})`)
     assert(validate.data?.data?.valid === true, `Draft valid:true (got ${JSON.stringify(validate.data?.data?.valid)})`)
+    assert(Number(validate.data?.data?.summary?.fgValue) === FG_VALUE, `Summary fgValue is BOM-derived (${validate.data?.data?.summary?.fgValue}, want ${FG_VALUE})`)
   } catch (e) {
     assert(false, `Save/validate failed: ${e.message}`)
   }
@@ -215,12 +261,41 @@ async function run() {
     const list = entries.data?.data
     const rows = Array.isArray(list) ? list : (list?.entries || list?.data || [])
     assert(entries.status === 200 && rows.some((r) => r.id === journalEntryId || String(r.reference || '').startsWith('GUIDE-ANGEL')), 'Opening JE found via sourceModule=OPENING')
+
+    const entry = await tenantAdmin.api(`/finance/journal/${journalEntryId}`)
+    const lines = entry.data?.data?.lines || []
+    const fgDebit = lines.find((l) => String(l.account?.code) === '1325' && Number(l.debit) > 0)
+    assert(entry.status === 200 && Number(fgDebit?.debit) === FG_VALUE, `Opening JE debits 1325 FG ${FG_VALUE} (got ${fgDebit?.debit})`)
+    const obeCredit = lines.find((l) => String(l.account?.code) === '3000' && Number(l.credit) > 0)
+    assert(!!obeCredit, `Opening JE credits 3000 OBE (got ${obeCredit?.credit})`)
+
+    const products = await tenantAdmin.api('/products')
+    const plist = products.data?.data || []
+    const prow = (Array.isArray(plist) ? plist : plist?.products || []).flatMap((p) => p.variants || []).find((v) => v.id === variantId)
+    assert(products.status === 200 && Number(prow?.availableFgQty) === FG_PACKS, `Variant shows ${FG_PACKS} opening packs available (got ${prow?.availableFgQty})`)
   } catch (e) {
     assert(false, `Balance verification failed: ${e.message}`)
   }
 
-  // 7. Idempotent re-complete
-  log('\n7. Idempotent re-complete')
+  // 7. Opening packs are sellable (CONFIRM allocates FG_STORE stock)
+  log('\n7. Opening packs sellable')
+  try {
+    const sale = await tenantAdmin.api('/sales', {
+      method: 'POST',
+      body: { customerId, lines: [{ variantId, qty: 2 }] },
+    })
+    assert(sale.status === 201, `Sale creation returns 201 (got ${sale.status})`)
+    const saleId = sale.data?.data?.id
+    assert(!!saleId, 'Sale ID returned')
+
+    const confirm = await tenantAdmin.api(`/sales/${saleId}/confirm`, { method: 'POST' })
+    assert(confirm.status === 200, `Sale CONFIRM returns 200 — no INSUFFICIENT_FG (got ${confirm.status})`)
+  } catch (e) {
+    assert(false, `Opening-stock sale failed: ${e.message}`)
+  }
+
+  // 8. Idempotent re-complete
+  log('\n8. Idempotent re-complete')
   try {
     const again = await tenantAdmin.api('/guide-angel/complete', { method: 'POST', body: { confirm: true } })
     assert(again.status === 200, `Second complete returns 200 (got ${again.status})`)
@@ -229,8 +304,8 @@ async function run() {
     assert(false, `Re-complete failed: ${e.message}`)
   }
 
-  // 8. Tenant isolation
-  log('\n8. Tenant isolation')
+  // 9. Tenant isolation
+  log('\n9. Tenant isolation')
   try {
     const platform = await tenantAdmin.api('/platform/tenants')
     assert(platform.status === 403, `Tenant admin blocked from /platform/tenants (got ${platform.status})`)

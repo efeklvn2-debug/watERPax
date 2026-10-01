@@ -2,13 +2,17 @@
 
 > Water-packaging MTS ERP. Forked lineage from FlexoPrint ERP, **independent repo/DB/domain/deploy**. Local-first, same hardening lineage.
 
-## CURRENT SESSION POINTER — WatERPax foundation (29 Aug 2026)
+## CURRENT SESSION POINTER — WatERPax build state (30 Sep 2026)
+
+- **State:** P0–P3 shipped. `master` @ `0279da9` (PR #5, financial statements + water report filters/trends). PRs #1–#5 all merged, CI green. Session history + **known issues** live in `CONTEXT.md` → "Session Log (continued, Sep–Oct 2026)" — read that before adding work.
+- **Balance Sheet tie-out — FIXED 30 Sep, uncommitted (awaiting branch → PR):** `reports/service.ts getBalanceSheet` now uses signed balances instead of `Math.abs()` (loss stays negative), `finance/repository.ts` nets debits-vs-credits for revenue/expenses/COGS so P&L ties to the BS, and `inventory/service.ts` credits `3000 OBE` (not `5400` EXPENSE) on non-opening stock increases. Legacy ₦45,500 credit on `5400` deliberately left alone (surfaces as −₦45,500 expenses). Verification: reports smoke 53/53, clean-room posting probe 17/17, all 7 local CI suites green, lint/build green. Details in `CONTEXT.md`.
+- **Local runtime:** `start-dev.bat` (PG + backend `:3001` + vite `:5173`). Backend runs plain `tsx` (**not** watch) → **restart it after every merge** or you are testing stale code. Smoke login for `/api/reports` is `admin`, never `superadmin` (`requireTenantUser` 403s SUPER_ADMIN).
 
 - **Source:** `C:/Users/USER/Desktop/rebuilding/To WebApp Project/FlexoPrint ERP` (live at `phlexerp.com.ng`, Hetzner `46.224.0.165`, PM2 `phlexerp-backend:3000`, DB `flexoprint`). **Do NOT edit that repo, DB, or deploy.**
 - **Target:** `C:/Users/USER/Desktop/watERPax` — new monorepo `waterpax` (this file). **No legacy data**; fresh DB `waterpax` on same PG server locally / same VPS remotely.
 - **Model:** Make-to-Stock. Sales decoupled from Production. `Roll` + `PrintedRoll` + `InkColor` + ink rates are **deleted** (not adapted). Pack sizes per `ProductVariant.packSize` tenant-configurable; variants are free-form labels (33cl seed is default, not enum — tenant can create any size). Jar products support OUTRIGHT/REFILL sales with per-variant jar material linkage.
 - **Plan:** `docs/PLAN.md` — LOCKED 2026-08-29. Phases: P0 foundation fork (this session), P1 inventory/Guide Angel, P2a ProductionRun + P2b Sales MTS/POS parallel, P3 reports/variance, P4 second vhost on Hetzner.
-- **Next action:** P0 scaffold validation: `npm ci` root → `packages/types build` → `prisma generate/push/seed` → `backend+frontend build` → `tsc --noEmit` → `smoke-test.mjs` green on local Postgres before any VPS work.
+- **Next action:** put the Balance Sheet fix on a feature branch → PR → merge (never commit on `master`), then P4 second vhost on Hetzner when the domain is set. P0 scaffold validation (`npm ci` → `packages/types build` → `prisma generate/push/seed` → builds → `tsc --noEmit` → `smoke-test.mjs`) already passed and is the standing pre-deploy gate.
 
 ## DEPLOY WORKFLOW — single source of truth (watERPax, mirrors FlexoPrint law)
 
@@ -97,7 +101,7 @@ waterpax/
 
 ## Guide Angel — Water Variant
 
-- Tenant ADMIN (`auth:manage_users`) wizard 4-step: Money→Customers→Suppliers→Stock (FG packs + raw lots, not rolls). Posts one balanced opening JE `Dr 1325-1327/1310 / Cr 3000 OBE` + `GuideAngelOpeningBalance` receivables. Idempotent, postal once. Printed FG on ground excluded pattern retained if tenant has residual stock to sell as `4200 Other Income` (optional).
+- Tenant ADMIN (`auth:manage_users`) wizard: Money→Customers→Suppliers→Stock→Review. **Products first:** save/validate/complete return `400 SETUP_NO_PRODUCTS` until ≥1 active product variant exists (frontend shows a blocking banner + disabled Next linking to Products). Stock step seeds raw/packaging lots (`stockItems: {materialId, qty}` → `Stock`@MAIN + Dr 1300/1311) **and** FG packs on ground (`fgItems: {variantId, packs}` → `FinishedGoodStock`@`FG_STORE` batch `OPENING` + Dr 1325/1326/1327 by product category). FG packs valued from the variant BOM at current material `costPrice` (`Σ qtyPerPack × (1+wastagePct/100) × costPrice`); variants without a BOM are rejected for FG entry. One balanced opening JE `Dr 1300/1311/1325-1327/1200/1000… / Cr 2000/2250/2500/3000 OBE` + `GuideAngelOpeningBalance` receivables/payables. Idempotent, postal once. (The old "FG stays off-book / sell via Sales as 4200" stub is gone — CONFIRM hard-blocks `INSUFFICIENT_FG` on empty `FG_STORE`, so off-book FG was unsellable.)
 
 ## Commands
 
