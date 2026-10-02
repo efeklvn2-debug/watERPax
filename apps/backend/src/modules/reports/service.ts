@@ -422,9 +422,12 @@ export const reportsService = {
           accountId: b.accountId,
           accountCode: b.accountCode,
           accountName: b.accountName,
+          parentId: b.parentId ?? null,
           balance: Math.round(b.balance * sign * 100) / 100
         }))
-      const total = Math.round(accounts.reduce((s, a) => s + a.balance, 0) * 100) / 100
+      // Totals count top-level rows only: a parent row already rolls up its
+      // children, so summing every listed row would double-count subtrees.
+      const total = Math.round(accounts.filter(a => !a.parentId).reduce((s, a) => s + a.balance, 0) * 100) / 100
       return { type, accounts, total }
     }
 

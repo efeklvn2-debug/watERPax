@@ -1384,7 +1384,11 @@ export function FinancePage() {
                       ) : balances.map(balance => (
                         <tr key={balance.accountId} className="hover:bg-slate-50">
                           <td className="px-6 py-4 text-sm font-mono font-medium text-slate-900 cursor-pointer hover:text-blue-600" onClick={() => handleViewLedger(balance.accountId, balance.accountCode, balance.accountName)}>{balance.accountCode}</td>
-                          <td className="px-6 py-4 text-sm text-slate-900">{balance.accountName}</td>
+                          <td className="px-6 py-4 text-sm text-slate-900">{balance.accountName}
+                            {(balance.isParent || (balance.childCount ?? 0) > 0) && (
+                              <span className="block text-xs font-normal text-slate-400">incl. {balance.childCount ?? 0} child account{(balance.childCount ?? 0) === 1 ? '' : 's'}</span>
+                            )}
+                          </td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${accountTypeColors[balance.accountType] || 'bg-gray-100 text-gray-800'}`}>
                               {balance.accountType}
@@ -1404,10 +1408,10 @@ export function FinancePage() {
                         <tr>
                           <td colSpan={3} className="px-6 py-3 text-sm font-bold text-slate-900">TOTAL</td>
                           <td className="px-6 py-3 text-sm text-right font-bold text-slate-900">
-                            {formatCurrency(balances.filter(b => !b.parentId).reduce((sum, b) => sum + (b.totalDebit ?? 0), 0))}
+                            {formatCurrency(balances.reduce((sum, b) => sum + (b.totalDebit ?? 0), 0))}
                           </td>
                           <td className="px-6 py-3 text-sm text-right font-bold text-slate-900">
-                            {formatCurrency(balances.filter(b => !b.parentId).reduce((sum, b) => sum + (b.totalCredit ?? 0), 0))}
+                            {formatCurrency(balances.reduce((sum, b) => sum + (b.totalCredit ?? 0), 0))}
                           </td>
                           <td className="px-6 py-3 text-sm text-right font-bold text-slate-900">
                             {formatCurrency(balances.filter(b => !b.parentId).reduce((sum, b) => sum + (b.balance ?? 0), 0))}
@@ -2295,12 +2299,32 @@ export function FinancePage() {
                     <p className="text-lg font-bold text-slate-900">{formatCurrency(ledgerData.openingBalance)}</p>
                   </div>
                   <div className="bg-slate-50 rounded-lg p-3">
-                    <span className="text-slate-500">Closing Balance</span>
+                    <span className="text-slate-500">Closing Balance (this account only)</span>
                     <p className={`text-lg font-bold ${ledgerData.closingBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                       {formatCurrency(ledgerData.closingBalance)}
                     </p>
                   </div>
                 </div>
+
+                {(ledgerData.children || []).length > 0 && (
+                  <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-sm">
+                    <p className="font-medium text-slate-700 mb-2">
+                      Child accounts ({ledgerData.children.length}) — total {formatCurrency(ledgerData.childrenTotal ?? 0)}
+                    </p>
+                    <div className="space-y-1">
+                      {(ledgerData.children || []).map(c => (
+                        <div key={c.accountId} className="flex justify-between text-slate-600">
+                          <span className="font-mono text-xs">{c.accountCode} - {c.accountName}</span>
+                          <span className="font-medium">{formatCurrency(c.balance)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between mt-2 pt-2 border-t border-blue-100 font-bold text-slate-900">
+                      <span>Consolidated (as on Balances page)</span>
+                      <span>{formatCurrency(ledgerData.consolidatedBalance ?? ledgerData.closingBalance)}</span>
+                    </div>
+                  </div>
+                )}
 
                 <table className="min-w-full divide-y divide-slate-200">
                   <thead className="bg-slate-50">

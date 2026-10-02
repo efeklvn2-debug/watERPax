@@ -512,9 +512,21 @@ export const financeService = {
     const account = await financeRepository.findAccountById(accountId)
     if (!account) throw new AppError(404, 'NOT_FOUND', 'Account not found')
 
-    const openingBalance = await financeRepository.getAccountBalance(
+    // Opening anchor for the running balance. With a date filter this is the
+    // balance *before* the range; without one it must be the static account
+    // opening only — getAccountBalance with no asOf sums every line ever,
+    // and adding the (also unfiltered) lines on top would double-count.
+    const openingBalance = dateFrom
+      ? await financeRepository.getAccountBalance(accountId, dateStartOfDay(dateFrom))
+      : {
+          openingBalance: Number(account.openingBalance ?? 0),
+          totalDebit: 0,
+          totalCredit: 0
+        }
+
+    const childBalances = await financeRepository.getChildBalances(
       accountId,
-      dateFrom ? dateStartOfDay(dateFrom) : undefined
+      dateTo ? dateEndOfDay(dateTo) : undefined
     )
 
     const entries = await prisma.journalLine.findMany({
@@ -556,7 +568,13 @@ export const financeService = {
       },
       openingBalance: openingBalance.openingBalance,
       closingBalance: runningBalance,
-      transactions
+      transactions,
+      // Parent-child breakdown: the ledger above (and closingBalance) cover
+      // this account only. Children are all-time as-of dateTo so that
+      // consolidatedBalance equals the Balances page row (which is unfiltered).
+      children: childBalances.children,
+      childrenTotal: childBalances.total,
+      consolidatedBalance: runningBalance + childBalances.total
     }
   },
 
