@@ -17,6 +17,8 @@ export function PlatformPage() {
   // Filters
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [sortKey, setSortKey] = useState<'lastSeen' | 'name' | 'users' | 'customers' | 'created'>('lastSeen')
+  const [sortAsc, setSortAsc] = useState(false)
 
   // Create tenant modal
   const [showCreate, setShowCreate] = useState(false)
@@ -168,6 +170,48 @@ export function PlatformPage() {
     return true
   })
 
+  const sortedTenants = [...filteredTenants].sort((a, b) => {
+    let cmp: number
+    switch (sortKey) {
+      case 'name':
+        cmp = a.name.localeCompare(b.name)
+        break
+      case 'users':
+        cmp = (a.userCount ?? 0) - (b.userCount ?? 0)
+        break
+      case 'customers':
+        cmp = (a.customerCount ?? 0) - (b.customerCount ?? 0)
+        break
+      case 'created':
+        cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        break
+      case 'lastSeen': {
+        const ta = a.lastLoginAt ? new Date(a.lastLoginAt).getTime() : NaN
+        const tb = b.lastLoginAt ? new Date(b.lastLoginAt).getTime() : NaN
+        if (Number.isNaN(ta) && Number.isNaN(tb)) cmp = 0
+        else if (Number.isNaN(ta)) return 1 // Never always last
+        else if (Number.isNaN(tb)) return -1
+        else cmp = ta - tb
+        break
+      }
+    }
+    return sortAsc ? cmp : -cmp
+  })
+
+  const toggleSort = (key: typeof sortKey, defaultAsc: boolean) => {
+    if (sortKey === key) setSortAsc(v => !v)
+    else {
+      setSortKey(key)
+      setSortAsc(defaultAsc)
+    }
+  }
+
+  const SortTh = ({ label, k, defaultAsc = false, className = '' }: { label: string; k: typeof sortKey; defaultAsc?: boolean; className?: string }) => (
+    <th className={`px-4 py-3 cursor-pointer select-none hover:text-slate-700 ${className}`} onClick={() => toggleSort(k, defaultAsc)}>
+      {label}{sortKey === k ? (sortAsc ? ' ▲' : ' ▼') : ''}
+    </th>
+  )
+
   return (
     <Layout>
       <div className="max-w-6xl mx-auto">
@@ -202,18 +246,18 @@ export function PlatformPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  <th className="px-4 py-3">Name</th>
+                  <SortTh label="Name" k="name" defaultAsc />
                   <th className="px-4 py-3">Slug</th>
                   <th className="px-4 py-3 text-center">Status</th>
-                  <th className="px-4 py-3 text-center">Users</th>
-                  <th className="px-4 py-3 text-center">Last Seen</th>
-                  <th className="px-4 py-3 text-center">Customers</th>
-                  <th className="px-4 py-3">Created</th>
+                  <SortTh label="Users" k="users" className="text-center" />
+                  <SortTh label="Last Seen" k="lastSeen" className="text-center" />
+                  <SortTh label="Customers" k="customers" className="text-center" />
+                  <SortTh label="Created" k="created" defaultAsc />
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredTenants.map(t => (
+                {sortedTenants.map(t => (
                   <tr key={t.id} className={`hover:bg-slate-50 ${!t.isActive ? 'opacity-50' : ''}`}>
                     <td className="px-4 py-3 font-medium text-slate-800">{t.name}</td>
                     <td className="px-4 py-3 text-sm text-slate-500">{t.slug}</td>
