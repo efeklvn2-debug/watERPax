@@ -27,18 +27,27 @@ async function seedTenantDefaults(tenantId: string) {
 
 export const platformService = {
   async listTenants() {
-    const tenants = await prisma.tenant.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: {
-          select: {
-            users: true,
-            salesOrders: true,
-            customers: true,
+    const [tenants, lastLogins] = await Promise.all([
+      prisma.tenant.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: {
+            select: {
+              users: true,
+              customers: true,
+            },
           },
         },
-      },
-    })
+      }),
+      prisma.refreshToken.groupBy({
+        by: ['tenantId'],
+        _max: { createdAt: true },
+      }),
+    ])
+    const lastLoginByTenant = new Map(
+      lastLogins.filter((r): r is typeof r & { tenantId: string } => r.tenantId !== null)
+        .map(r => [r.tenantId, r._max.createdAt]),
+    )
     return tenants.map(t => ({
       id: t.id,
       name: t.name,
@@ -47,7 +56,7 @@ export const platformService = {
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
       userCount: t._count.users,
-      salesOrderCount: t._count.salesOrders,
+      lastLoginAt: lastLoginByTenant.get(t.id) ?? null,
       customerCount: t._count.customers,
     }))
   },
@@ -62,7 +71,6 @@ export const platformService = {
         },
         _count: {
           select: {
-            salesOrders: true,
             customers: true,
             materials: true,
             productionRuns: true,
@@ -71,7 +79,12 @@ export const platformService = {
       },
     })
     if (!tenant) throw new AppError(404, 'NOT_FOUND', 'Tenant not found')
-    return tenant
+    const lastLogin = await prisma.refreshToken.findFirst({
+      where: { tenantId: id },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    })
+    return { ...tenant, lastLoginAt: lastLogin?.createdAt ?? null }
   },
 
   async createTenant(input: CreateTenantInput) {
