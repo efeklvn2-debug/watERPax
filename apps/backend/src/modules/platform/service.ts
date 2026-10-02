@@ -138,6 +138,7 @@ export const platformService = {
     await prisma.supplierInvoice.deleteMany({ where: { tenantId: id } })
     await prisma.orderItem.deleteMany({ where: { tenantId: id } })
     await prisma.coreBuyback.deleteMany({ where: { tenantId: id } })
+    await prisma.supplierCreditNote.deleteMany({ where: { tenantId: id } })
 
     await prisma.stock.deleteMany({ where: { tenantId: id } })
     await prisma.invoice.deleteMany({ where: { tenantId: id } })
@@ -149,8 +150,31 @@ export const platformService = {
     await prisma.order.deleteMany({ where: { tenantId: id } })
     await prisma.journalEntry.deleteMany({ where: { tenantId: id } })
 
+    // MTS sales family — children before parents
+    await prisma.customerReturnsAllocationPatch.deleteMany({ where: { tenantId: id } })
+    await prisma.customerCreditNote.deleteMany({ where: { tenantId: id } })
+    await prisma.saleLine.deleteMany({ where: { tenantId: id } })
+    await prisma.sale.deleteMany({ where: { tenantId: id } })
+
+    // Guide Angel (opening balances FK Customer/Supplier)
+    await prisma.guideAngelOpeningBalance.deleteMany({ where: { tenantId: id } })
+    await prisma.guideAngelSession.deleteMany({ where: { tenantId: id } })
+
     await prisma.customer.deleteMany({ where: { tenantId: id } })
     await prisma.supplier.deleteMany({ where: { tenantId: id } })
+
+    // Products / production family — children before parents
+    await prisma.finishedGoodStock.deleteMany({ where: { tenantId: id } })
+    await prisma.productionRunComponentUsage.deleteMany({ where: { tenantId: id } })
+    await prisma.productionRun.deleteMany({ where: { tenantId: id } })
+    await prisma.bOM.deleteMany({ where: { tenantId: id } })
+    await prisma.productVariant.deleteMany({ where: { tenantId: id } })
+    await prisma.product.deleteMany({ where: { tenantId: id } })
+
+    // Tax module (tenant-scoped, no children)
+    await prisma.taxProvision.deleteMany({ where: { tenantId: id } })
+    await prisma.payeEntry.deleteMany({ where: { tenantId: id } })
+
     await prisma.material.deleteMany({ where: { tenantId: id } })
     await prisma.account.deleteMany({ where: { tenantId: id } })
 
