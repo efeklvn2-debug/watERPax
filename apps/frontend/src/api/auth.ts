@@ -103,6 +103,10 @@ export const authApi = {
     return api.get<{ id: string; username: string; role: string; isActive: boolean; overrides: UserOverride[] }>(`/auth/users/${id}`)
   },
 
+  createUser: async (data: { username: string; password: string; role?: string }) => {
+    return api.post<{ id: string; username: string; role: string; isActive: boolean }>('/auth/register', data)
+  },
+
   updateUser: async (id: string, data: { role?: string; isActive?: boolean }) => {
     return api.patch(`/auth/users/${id}`, data)
   },

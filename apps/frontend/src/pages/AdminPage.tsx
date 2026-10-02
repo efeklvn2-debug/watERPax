@@ -32,6 +32,12 @@ export function AdminPage() {
   const [editActive, setEditActive] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  // Add user modal
+  const [showAddUser, setShowAddUser] = useState(false)
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newRole, setNewRole] = useState('OPERATOR')
+
   // Roles tab
   const [roles, setRoles] = useState<RoleInfo[]>([])
   const [allPermissions, setAllPermissions] = useState<PermissionInfo[]>([])
@@ -152,6 +158,26 @@ export function AdminPage() {
 
   // ── User edit ────────────────────────────────────────────────
 
+  const openAddUser = () => {
+    setNewUsername('')
+    setNewPassword('')
+    setNewRole('OPERATOR')
+    setShowAddUser(true)
+  }
+
+  const createUser = async () => {
+    setSaving(true)
+    try {
+      await authApi.createUser({ username: newUsername.trim(), password: newPassword, role: newRole })
+      notify.success(`User ${newUsername.trim()} created`)
+      setShowAddUser(false)
+      loadUsers()
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to create user')
+    }
+    setSaving(false)
+  }
+
   const openEditModal = (u: UserListItem) => {
     setEditUser(u)
     setEditRole(u.role)
@@ -258,6 +284,15 @@ export function AdminPage() {
         {/* ── Users Tab ──────────────────────────────────────────── */}
         {activeTab === 'users' && (
           <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h3 className="text-sm font-semibold text-slate-800">Tenant Users</h3>
+              <button
+                onClick={openAddUser}
+                className="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100"
+              >
+                + Add User
+              </button>
+            </div>
             {loading ? (
               <div className="p-8 text-center text-slate-500">Loading users...</div>
             ) : users.length === 0 ? (
@@ -627,6 +662,62 @@ export function AdminPage() {
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Add User Modal ────────────────────────────────────── */}
+        {showAddUser && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md">
+              <h2 className="text-lg font-semibold text-slate-900 mb-4">Add User</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Username</label>
+                  <input
+                    type="text"
+                    value={newUsername}
+                    onChange={e => setNewUsername(e.target.value)}
+                    placeholder="unique username"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="min 8 chars, 1 uppercase, 1 number"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
+                  <select
+                    value={newRole}
+                    onChange={e => setNewRole(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  >
+                    <option value="ADMIN">ADMIN</option>
+                    <option value="MANAGER">MANAGER</option>
+                    <option value="OPERATOR">OPERATOR</option>
+                    <option value="VIEWER">VIEWER</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button onClick={() => setShowAddUser(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200">
+                  Cancel
+                </button>
+                <button
+                  onClick={createUser}
+                  disabled={!newUsername.trim() || newPassword.length < 8 || saving}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {saving ? 'Creating...' : 'Create User'}
                 </button>
               </div>
             </div>
