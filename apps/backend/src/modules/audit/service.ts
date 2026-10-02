@@ -9,6 +9,7 @@ export const auditService = {
     try {
       await auditRepository.create({
         userId: input.userId ?? null,
+        tenantId: input.tenantId ?? null,
         action: input.action,
         entityType: input.entityType,
         entityId: input.entityId ?? null,

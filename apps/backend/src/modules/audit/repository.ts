@@ -5,6 +5,7 @@ import { AuditLogQuery, AuditLogResult, AuditLogEntry } from './types'
 export const auditRepository = {
   async create(data: {
     userId?: string | null
+    tenantId?: string | null
     action: string
     entityType: string
     entityId?: string | null
@@ -15,6 +16,7 @@ export const auditRepository = {
     return prisma.auditLog.create({
       data: {
         userId: data.userId ?? null,
+        tenantId: data.tenantId ?? null,
         action: data.action,
         entityType: data.entityType,
         entityId: data.entityId ?? null,
