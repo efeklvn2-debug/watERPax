@@ -6,10 +6,10 @@ import { useAuthStore } from '../stores/authStore'
 import { reportsApi } from '../api/reports'
 
 interface DashboardData {
-  fgAvailable: { packs: number; value: number }
-  todayProduction: { packs: number; runs: number }
-  todaySales: { packs: number; value: number }
-  lowRaw: { count: number; items: { code: string; name: string; unit: string; stock: number; minStock: number }[] }
+  fgAvailable: { packs: number; value: number; byCategory?: Record<string, number>; defectivePacks?: number }
+  todayProduction: { packs: number; runs: number; byCategory?: Record<string, number> }
+  todaySales: { packs: number; value: number; collected?: number; outstanding?: number }
+  lowRaw: { count: number; outCount?: number; items: { code: string; name: string; unit: string; stock: number; minStock: number }[] }
   recentBatches: { runNumber: string; variant: string; product: string; batchNumber: string; packs: number; completedAt: string; unitCost: number }[]
 }
 
@@ -57,11 +57,52 @@ function DashboardPage() {
   // nothing meanwhile so no tenant UI flashes before navigation.
   if (currentUser?.role === 'SUPER_ADMIN') return null
 
-  const cards = data ? [
-    { label: 'FG Available', value: `${data.fgAvailable.packs.toLocaleString()} packs`, sub: money(data.fgAvailable.value), path: '/inventory', tone: 'blue' },
-    { label: 'Today Production', value: `${data.todayProduction.packs.toLocaleString()} packs`, sub: `${data.todayProduction.runs} runs`, path: '/production', tone: 'green' },
-    { label: 'Today Sales', value: money(data.todaySales.value), sub: `${data.todaySales.packs.toLocaleString()} packs`, path: '/sales', tone: 'indigo' },
-    { label: 'Low Raw Materials', value: String(data.lowRaw.count), sub: data.lowRaw.count > 0 ? 'needs restocking' : 'all stocked', path: '/inventory', tone: data.lowRaw.count > 0 ? 'red' : 'slate' }
+  const catLine = (m: Record<string, number> | undefined) =>
+    m && Object.keys(m).length > 0
+      ? Object.entries(m).map(([k, v]) => `${k}: ${v.toLocaleString()}`).join(' · ')
+      : null
+
+  const cards: { label: string; value: string; sub: string; details: string[]; path: string; tone: string }[] = data ? [
+    {
+      label: 'FG Available',
+      value: `${data.fgAvailable.packs.toLocaleString()} packs`,
+      sub: money(data.fgAvailable.value),
+      details: [
+        catLine(data.fgAvailable.byCategory),
+        data.fgAvailable.defectivePacks ? `${data.fgAvailable.defectivePacks.toLocaleString()} defective (not sellable)` : null
+      ].filter((d): d is string => d !== null),
+      path: '/inventory',
+      tone: 'blue'
+    },
+    {
+      label: 'Today Production',
+      value: `${data.todayProduction.packs.toLocaleString()} packs`,
+      sub: `${data.todayProduction.runs} run${data.todayProduction.runs === 1 ? '' : 's'} completed`,
+      details: [catLine(data.todayProduction.byCategory)].filter((d): d is string => d !== null),
+      path: '/production',
+      tone: 'green'
+    },
+    {
+      label: 'Today Sales',
+      value: money(data.todaySales.value),
+      sub: `${data.todaySales.packs.toLocaleString()} packs sold`,
+      details: [
+        data.todaySales.collected !== undefined ? `Collected: ${money(data.todaySales.collected)}` : null,
+        data.todaySales.outstanding !== undefined && data.todaySales.outstanding > 0 ? `Outstanding: ${money(data.todaySales.outstanding)}` : null
+      ].filter((d): d is string => d !== null),
+      path: '/sales',
+      tone: 'indigo'
+    },
+    {
+      label: 'Low Raw Materials',
+      value: String(data.lowRaw.count),
+      sub: data.lowRaw.count > 0 ? 'needs restocking' : 'all stocked',
+      details: data.lowRaw.count > 0 && data.lowRaw.outCount !== undefined
+        ? [`${data.lowRaw.outCount} out of stock · ${data.lowRaw.count - data.lowRaw.outCount} below minimum`]
+        : [],
+      path: '/inventory',
+      tone: data.lowRaw.count > 0 ? 'red' : 'slate'
+    }
   ] : []
 
   const toneBg: Record<string, string> = {
@@ -116,6 +157,13 @@ function DashboardPage() {
                       <p className="text-sm font-medium text-slate-500">{c.label}</p>
                       <p className="text-2xl font-bold text-slate-900 mt-1">{c.value}</p>
                       <p className="text-sm text-slate-500 mt-1">{c.sub}</p>
+                      {c.details.length > 0 && (
+                        <div className="mt-3 space-y-1 border-t border-slate-100 pt-2">
+                          {c.details.map(d => (
+                            <p key={d} className="text-xs text-slate-600">{d}</p>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className={`p-3 rounded-lg ${toneBg[c.tone] || toneBg.slate}`}>
                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

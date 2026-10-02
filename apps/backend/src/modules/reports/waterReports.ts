@@ -449,7 +449,7 @@ export const waterReportsService = {
 
     const runsToday = await prisma.productionRun.findMany({
       where: { status: 'COMPLETED', completedAt: { gte: today.gte, lte: today.lte } },
-      select: { actualPacks: true }
+      select: { actualPacks: true, variant: { select: { product: { select: { category: true } } } } }
     })
 
     const invoicesToday = await prisma.invoice.findMany({
@@ -458,14 +458,34 @@ export const waterReportsService = {
     })
     let salesPacks = 0
     let salesValue = 0
+    let salesCollected = 0
+    let salesOutstanding = 0
     for (const inv of invoicesToday) {
       const sale: any = inv.sale
       if (!sale) continue
       salesPacks += sale.lines.reduce((s: number, l: any) => s + l.qty, 0)
       salesValue = round2(salesValue + Number(inv.totalAmount))
+      salesCollected = round2(salesCollected + Number(inv.amountPaid || 0))
+      salesOutstanding = round2(salesOutstanding + Number(inv.balanceDue || 0))
     }
 
     const low = await this.lowRaw()
+    const lowRows = low.rows as Record<string, string | number>[]
+    const lowOut = lowRows.filter(r => Number(r.stock) <= 0).length
+
+    // FG available split by product category (sellable FG_STORE packs only)
+    const fgByCategory: Record<string, number> = {}
+    for (const row of fg.rows as Record<string, string | number>[]) {
+      if (row.location !== 'FG_STORE') continue
+      const cat = String(row.category || 'OTHER')
+      fgByCategory[cat] = (fgByCategory[cat] || 0) + Number(row.packs)
+    }
+
+    const productionByCategory: Record<string, number> = {}
+    for (const r of runsToday) {
+      const cat = (r.variant as any)?.product?.category || 'OTHER'
+      productionByCategory[cat] = (productionByCategory[cat] || 0) + (r.actualPacks || 0)
+    }
 
     const recentRuns = await prisma.productionRun.findMany({
       where: { status: 'COMPLETED' },
@@ -475,13 +495,14 @@ export const waterReportsService = {
     })
 
     return {
-      fgAvailable: fg.totals,
+      fgAvailable: { ...fg.totals, byCategory: fgByCategory },
       todayProduction: {
         packs: runsToday.reduce((s, r) => s + (r.actualPacks || 0), 0),
-        runs: runsToday.length
+        runs: runsToday.length,
+        byCategory: productionByCategory
       },
-      todaySales: { packs: salesPacks, value: salesValue },
-      lowRaw: { count: (low.totals.count as number) || 0, items: low.rows.slice(0, 5) },
+      todaySales: { packs: salesPacks, value: salesValue, collected: salesCollected, outstanding: salesOutstanding },
+      lowRaw: { count: (low.totals.count as number) || 0, outCount: lowOut, items: lowRows.slice(0, 5) },
       recentBatches: recentRuns.map(r => ({
         runNumber: r.runNumber,
         variant: (r.variant as any)?.label || '',
