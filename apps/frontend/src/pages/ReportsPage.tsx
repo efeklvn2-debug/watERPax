@@ -616,8 +616,8 @@ function BalanceSheetView({ data: rawData }: { data: BalanceSheetReport | null }
           <tbody>
             {section.accounts.map(a => (
               <tr key={a.accountId} className="border-b border-slate-100">
-                <td className="py-1.5 text-slate-400 w-16">{a.accountCode}</td>
-                <td className="py-1.5">{a.accountName}</td>
+                <td className="py-1.5 text-slate-400 w-16">{a.parentId ? <span className="inline-block w-4" /> : null}{a.accountCode}</td>
+                <td className="py-1.5">{a.parentId ? <span className="inline-block w-4 text-slate-300">↳ </span> : null}{a.accountName}</td>
                 <td className="py-1.5 text-right font-medium">{formatCurrency(a.balance)}</td>
               </tr>
             ))}

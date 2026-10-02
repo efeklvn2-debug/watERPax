@@ -48,6 +48,7 @@ export interface AccountBalance {
   totalCredit: number
   balance: number
   isParent?: boolean
+  childCount?: number
 }
 
 export interface TrialBalance {
@@ -144,6 +145,9 @@ export interface GeneralLedger {
   openingBalance: number
   closingBalance: number
   transactions: LedgerTransaction[]
+  children: { accountId: string; accountCode: string; accountName: string; balance: number }[]
+  childrenTotal: number
+  consolidatedBalance: number
 }
 
 export interface JournalEntryInput {

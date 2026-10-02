@@ -98,6 +98,7 @@ export interface BalanceSheetLine {
   accountCode: string
   accountName: string
   balance: number
+  parentId?: string | null
 }
 
 export interface BalanceSheetSection {

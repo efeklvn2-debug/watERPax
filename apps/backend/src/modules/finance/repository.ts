@@ -150,6 +150,32 @@ export const financeRepository = {
     }
   },
 
+  // Direct children of an account with recursively rolled-up balances.
+  // Same math as the parent rows of getAllAccountBalances (active accounts
+  // only), so consolidatedBalance below always equals the Balances page row.
+  async getChildBalances(accountId: string, asOfDate?: Date) {
+    const children = await prisma.account.findMany({
+      where: { parentId: accountId, isActive: true },
+      orderBy: { code: 'asc' }
+    })
+    const rows = []
+    for (const child of children) {
+      const own = await this.getAccountBalance(child.id, asOfDate)
+      const sub = await this.getChildBalances(child.id, asOfDate)
+      rows.push({
+        accountId: child.id,
+        accountCode: child.code,
+        accountName: child.name,
+        openingBalance: own.openingBalance,
+        totalDebit: own.totalDebit,
+        totalCredit: own.totalCredit,
+        childrenTotal: sub.total,
+        balance: own.balance + sub.total
+      })
+    }
+    return { children: rows, total: rows.reduce((s, r) => s + r.balance, 0) }
+  },
+
   async getAllAccountBalances(asOfDate?: Date) {
     const accounts = await prisma.account.findMany({
       where: { isActive: true },
@@ -197,6 +223,7 @@ export const financeRepository = {
       parentId: acc.parentId,
       ...balances[acc.id],
       isParent: parentIds.has(acc.id),
+      childCount: accounts.filter(a => a.parentId === acc.id).length,
       balance: parentIds.has(acc.id) ? aggregateIntoParent(acc.id) : balances[acc.id].openingBalance + balances[acc.id].totalDebit - balances[acc.id].totalCredit
     }))
   },
