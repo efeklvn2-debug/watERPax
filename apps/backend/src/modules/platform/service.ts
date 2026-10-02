@@ -7,6 +7,58 @@ import { CreateTenantInput, CreateTenantUserInput, UpdateTenantInput } from './v
 
 const logger = createChildLogger('platform:service')
 
+const LOGIN_AUDIT_ACTIONS = ['auth.login', 'auth.login2fa', 'auth.2fa_enroll']
+
+// Last login per tenant, derived from the audit log (durable) rather than
+// refresh tokens (session state — wiped on logout/rotation/user edits).
+// Covers legacy rows too: login audit entries carry userId, and userId maps
+// to the user's tenant even where the row's own tenantId was null.
+async function lastLoginByTenantMap(): Promise<Map<string, Date>> {
+  const tenantUsers = await prisma.user.findMany({
+    where: { tenantId: { not: null } },
+    select: { id: true, tenantId: true },
+  })
+  if (tenantUsers.length === 0) return new Map()
+  const loginTimes = await prisma.auditLog.groupBy({
+    by: ['userId'],
+    where: {
+      action: { in: LOGIN_AUDIT_ACTIONS },
+      userId: { in: tenantUsers.map(u => u.id) },
+    },
+    _max: { createdAt: true },
+  })
+  const lastLoginByUser = new Map(
+    loginTimes.filter((r): r is typeof r & { userId: string } => r.userId !== null)
+      .map(r => [r.userId, r._max.createdAt]),
+  )
+  const byTenant = new Map<string, Date>()
+  for (const u of tenantUsers) {
+    const t = lastLoginByUser.get(u.id)
+    if (!t) continue
+    const tenantId = u.tenantId as string
+    const current = byTenant.get(tenantId)
+    if (!current || t > current) byTenant.set(tenantId, t)
+  }
+  return byTenant
+}
+
+async function tenantLastLogin(tenantId: string): Promise<Date | null> {
+  const tenantUserIds = (await prisma.user.findMany({
+    where: { tenantId },
+    select: { id: true },
+  })).map(u => u.id)
+  if (tenantUserIds.length === 0) return null
+  const lastLogin = await prisma.auditLog.findFirst({
+    where: {
+      action: { in: LOGIN_AUDIT_ACTIONS },
+      OR: [{ userId: { in: tenantUserIds } }, { tenantId }],
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  })
+  return lastLogin?.createdAt ?? null
+}
+
 import { DEFAULT_ACCOUNTS } from '@waterpax/types'
 
 async function seedTenantDefaults(tenantId: string) {
@@ -27,7 +79,7 @@ async function seedTenantDefaults(tenantId: string) {
 
 export const platformService = {
   async listTenants() {
-    const [tenants, lastLogins] = await Promise.all([
+    const [tenants, lastLoginByTenant] = await Promise.all([
       prisma.tenant.findMany({
         orderBy: { createdAt: 'desc' },
         include: {
@@ -39,15 +91,8 @@ export const platformService = {
           },
         },
       }),
-      prisma.refreshToken.groupBy({
-        by: ['tenantId'],
-        _max: { createdAt: true },
-      }),
+      lastLoginByTenantMap(),
     ])
-    const lastLoginByTenant = new Map(
-      lastLogins.filter((r): r is typeof r & { tenantId: string } => r.tenantId !== null)
-        .map(r => [r.tenantId, r._max.createdAt]),
-    )
     return tenants.map(t => ({
       id: t.id,
       name: t.name,
@@ -79,12 +124,8 @@ export const platformService = {
       },
     })
     if (!tenant) throw new AppError(404, 'NOT_FOUND', 'Tenant not found')
-    const lastLogin = await prisma.refreshToken.findFirst({
-      where: { tenantId: id },
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
-    })
-    return { ...tenant, lastLoginAt: lastLogin?.createdAt ?? null }
+    const lastLoginAt = await tenantLastLogin(id)
+    return { ...tenant, lastLoginAt }
   },
 
   async createTenant(input: CreateTenantInput) {

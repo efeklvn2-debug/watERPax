@@ -29,6 +29,7 @@ export interface AuditLogResult {
 
 export interface RecordAuditInput {
   userId?: string | null
+  tenantId?: string | null
   action: string
   entityType: string
   entityId?: string | null

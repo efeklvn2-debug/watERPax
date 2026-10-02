@@ -31,6 +31,7 @@ export const authController = {
       setAuthCookies(req, res, result.tokens.accessToken, result.tokens.refreshToken)
       auditService.record({
         userId: result.user.id,
+        tenantId: result.user.tenantId,
         action: 'auth.login',
         entityType: 'User',
         entityId: result.user.id,
@@ -286,6 +287,7 @@ export const authController = {
       const result = await authService.enroll2fa(req.user?.id, body.postAuthToken, { code: body.code })
       auditService.record({
         userId: result.user.id,
+        tenantId: result.user.tenantId,
         action: 'auth.2fa_enroll',
         entityType: 'User',
         entityId: result.user.id,
@@ -312,6 +314,7 @@ export const authController = {
       setAuthCookies(req, res, result.tokens.accessToken, result.tokens.refreshToken)
       auditService.record({
         userId: result.user.id,
+        tenantId: result.user.tenantId,
         action: 'auth.login2fa',
         entityType: 'User',
         entityId: result.user.id,
