@@ -4,6 +4,7 @@ import { Layout } from '../components/Layout'
 import { platformApi, Tenant, TenantDetail } from '../api/platform'
 import { useCachedFetch } from '../hooks/useCachedFetch'
 import { useMutationGuard } from '../hooks/useMutationGuard'
+import { timeAgo } from '../utils/dates'
 
 export function PlatformPage() {
   const notify = useNotification()
@@ -205,7 +206,7 @@ export function PlatformPage() {
                   <th className="px-4 py-3">Slug</th>
                   <th className="px-4 py-3 text-center">Status</th>
                   <th className="px-4 py-3 text-center">Users</th>
-                  <th className="px-4 py-3 text-center">Orders</th>
+                  <th className="px-4 py-3 text-center">Last Seen</th>
                   <th className="px-4 py-3 text-center">Customers</th>
                   <th className="px-4 py-3">Created</th>
                   <th className="px-4 py-3 text-right">Actions</th>
@@ -222,7 +223,7 @@ export function PlatformPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center text-sm text-slate-600">{t.userCount ?? 0}</td>
-                    <td className="px-4 py-3 text-center text-sm text-slate-600">{t.salesOrderCount ?? 0}</td>
+                    <td className="px-4 py-3 text-center text-sm text-slate-600">{t.lastLoginAt ? timeAgo(t.lastLoginAt) : <span className="text-slate-400">Never</span>}</td>
                     <td className="px-4 py-3 text-center text-sm text-slate-600">{t.customerCount ?? 0}</td>
                     <td className="px-4 py-3 text-sm text-slate-500">{formatDate(t.createdAt)}</td>
                     <td className="px-4 py-3 text-right">
@@ -332,8 +333,8 @@ export function PlatformPage() {
 
               <div className="grid grid-cols-4 gap-3 mb-6">
                 <div className="bg-slate-50 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-slate-800">{detailData._count.salesOrders}</div>
-                  <div className="text-xs text-slate-500">Orders</div>
+                  <div className="text-2xl font-bold text-slate-800">{detailData.lastLoginAt ? timeAgo(detailData.lastLoginAt) : <span className="text-slate-400">Never</span>}</div>
+                  <div className="text-xs text-slate-500">Last login</div>
                 </div>
                 <div className="bg-slate-50 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-slate-800">{detailData._count.customers}</div>
@@ -344,8 +345,8 @@ export function PlatformPage() {
                   <div className="text-xs text-slate-500">Materials</div>
                 </div>
                 <div className="bg-slate-50 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-slate-800">{detailData._count.productionJobs}</div>
-                  <div className="text-xs text-slate-500">Production Jobs</div>
+                  <div className="text-2xl font-bold text-slate-800">{detailData._count.productionRuns}</div>
+                  <div className="text-xs text-slate-500">Production Runs</div>
                 </div>
               </div>
 

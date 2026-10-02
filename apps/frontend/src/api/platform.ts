@@ -8,7 +8,7 @@ export interface Tenant {
   createdAt: string
   updatedAt?: string
   userCount?: number
-  salesOrderCount?: number
+  lastLoginAt?: string | null
   customerCount?: number
 }
 
@@ -21,10 +21,9 @@ export interface TenantDetail extends Tenant {
     createdAt: string
   }>
   _count: {
-    salesOrders: number
     customers: number
     materials: number
-    productionJobs: number
+    productionRuns: number
   }
 }
 
