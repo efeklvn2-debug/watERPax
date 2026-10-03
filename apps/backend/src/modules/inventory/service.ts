@@ -131,7 +131,7 @@ export const inventoryService = {
         }, tx)
 
         const amount = quantity * Number(existing.costPrice)
-        const inventoryAccountId = await financeService.getAccountIdByCode(existing.category === 'PACKAGING' ? '1510' : '1300')
+        const inventoryAccountId = await financeService.getAccountIdByCode(existing.category === 'PACKAGING' ? '1311' : '1300')
         const isReturnToSupplier = reason === 'Return to Supplier'
         const debitAccountId = isReturnToSupplier
           ? await financeService.getAccountIdByCode('2000')

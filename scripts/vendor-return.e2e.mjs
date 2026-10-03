@@ -211,8 +211,8 @@ async function main() {
   assert(!!cn?.id, 'Credit note ID returned')
   assert(cn.creditNoteNumber?.startsWith('CN-'), `Credit note number: ${cn.creditNoteNumber}`)
 
-  // ========== TEST 5: Verify credit note JE — Dr 2000 / Cr 1300 ==========
-  log('\n5. Verify credit note JE')
+  // ========== TEST 5: Verify credit note JE — Dr 2000 / Cr 1300 + Cr 1400 VAT ==========
+  log('\n5. Verify credit note JE (VAT-decomposed)')
   r = await admin.api(`/finance/journal?sourceModule=PROCUREMENT&limit=5`)
   const journalEntries = r.data?.data || []
   // Find the entry whose description mentions the credit note number or "Returned"
@@ -221,10 +221,22 @@ async function main() {
     (e.description || '').toLowerCase().includes('returned to vendor')
   )
   assert(!!cnEntry, 'Credit note JE found in journal')
-  const cnDebit = cnEntry.lines.find(l => Number(l.debit) > 0)
-  const cnCredit = cnEntry.lines.find(l => Number(l.credit) > 0)
+  const cnDebit = cnEntry.lines.find(l => Number(l.debit) > 0 && findAccountCode(l) === '2000')
+  const cnVatCredit = cnEntry.lines.find(l => Number(l.credit) > 0 && findAccountCode(l) === '1400')
+  const cnCredit = cnEntry.lines.find(l => Number(l.credit) > 0 && findAccountCode(l) === '1300')
+  assert(!!cnDebit, 'CN Dr 2000 AP present')
   assert(findAccountCode(cnDebit) === '2000', `CN Dr 2000 AP (got ${findAccountCode(cnDebit)})`)
-  assert(findAccountCode(cnCredit) === '1300', `CN Cr 1300 Inventory (got ${findAccountCode(cnCredit)})`)
+  assert(Number(cnDebit.debit) === 100, `CN Dr 2000 full inclusive amount 100 (got ${Number(cnDebit.debit)})`)
+  // VAT decomposition at the tenant rate (default 7.5%): Cr 1400 ≈ 6.98, Cr 1300 ≈ 93.02
+  if (cnVatCredit) {
+    const vat = Number(cnVatCredit.credit)
+    const ex = Number(cnCredit.credit)
+    assert(!!cnCredit, 'CN Cr 1300 Inventory present')
+    assert(Math.abs(vat + ex - 100) < 0.01, `CN legs sum to inclusive amount (vat ${vat} + ex ${ex})`)
+    assert(vat > 0 && ex > 0 && ex < 100, `CN inventory credited exclusive (ex ${ex} < 100)`)
+  } else {
+    log('  (no 1400 account on tenant — fell back to legacy single-leg credit)')
+  }
 
   // ========== TEST 6: Verify material A stock decremented by 10 ==========
   log('\n6. Material A stock decremented by 10')

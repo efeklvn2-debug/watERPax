@@ -66,18 +66,20 @@ export const financeRepository = {
     const client = db || prisma
     const year = new Date().getFullYear()
     const prefix = `JE-${year}-`
-    
-    const lastEntry = await client.journalEntry.findFirst({
+
+    // Numeric max over the suffix — string `orderBy desc` breaks once the
+    // suffix passes 9999 ('9999' > '10000' lexicographically).
+    const candidates = await client.journalEntry.findMany({
       where: { entryNumber: { startsWith: prefix } },
-      orderBy: { entryNumber: 'desc' }
+      select: { entryNumber: true }
     })
-    
-    if (!lastEntry) {
-      return `${prefix}0001`
+
+    let maxNum = 0
+    for (const e of candidates) {
+      const n = parseInt(e.entryNumber.slice(prefix.length), 10)
+      if (!isNaN(n) && n > maxNum) maxNum = n
     }
-    
-    const lastNum = parseInt(lastEntry.entryNumber.replace(prefix, ''))
-    return `${prefix}${String(lastNum + 1).padStart(4, '0')}`
+    return `${prefix}${String(maxNum + 1).padStart(4, '0')}`
   },
 
   
@@ -387,10 +389,12 @@ export const financeRepository = {
         accountId: vatOutputAccount.id,
         journalEntry: { date: { gte: dateFrom, lte: dateTo } }
       },
-      _sum: { credit: true }
+      _sum: { credit: true, debit: true }
     })
 
-    return result._sum.credit ? Number(result._sum.credit) : 0
+    // Net both sides: customer credit notes debit 2100 and must reduce output VAT.
+    const net = Number(result._sum.credit || 0) - Number(result._sum.debit || 0)
+    return Math.max(0, net)
   },
 
   async getInputVat(dateFrom: Date, dateTo: Date) {
@@ -402,9 +406,12 @@ export const financeRepository = {
         accountId: vatInputAccount.id,
         journalEntry: { date: { gte: dateFrom, lte: dateTo } }
       },
-      _sum: { debit: true }
+      _sum: { debit: true, credit: true }
     })
 
-    return result._sum.debit ? Number(result._sum.debit) : 0
+    // Net both sides: supplier credit notes reverse the original input VAT
+    // (credit 1400) and must reduce input VAT.
+    const net = Number(result._sum.debit || 0) - Number(result._sum.credit || 0)
+    return Math.max(0, net)
   }
 }
