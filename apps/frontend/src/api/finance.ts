@@ -187,6 +187,7 @@ export const financeApi = {
   getJournalEntryById: (id: string) => api.get<JournalEntry>(`/finance/journal/${id}`),
   postJournalEntry: (data: JournalEntryInput) => api.post<JournalEntry>('/finance/journal', data),
   reverseJournalEntry: (id: string) => api.post<JournalEntry>(`/finance/journal/${id}/reverse`, {}),
+  zeroObe: () => api.post<{ entryNumber: string; amount: number; previousBalance: number }>('/finance/obe/close', {}),
 
   // Balances
   getAllBalances: () => api.get<AccountBalance[]>('/finance/balances'),

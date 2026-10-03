@@ -216,5 +216,23 @@ export const financeController = {
     } catch (error: any) {
       sendError(res, error, 'finance.reverseJournalEntry')
     }
+  },
+
+  async zeroObe(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id
+      const result = await financeService.zeroOpeningBalanceEquity(userId)
+      auditService.record({
+        userId,
+        action: 'finance.obe_close',
+        entityType: 'Account',
+        entityId: '3000',
+        description: `Closed OBE balance ${result.previousBalance} to Retained Earnings (${result.entryNumber})`,
+        ipAddress: req.ip
+      })
+      res.json({ data: result })
+    } catch (error: any) {
+      sendError(res, error, 'finance.zeroObe')
+    }
   }
 }

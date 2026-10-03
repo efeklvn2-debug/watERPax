@@ -272,51 +272,40 @@ export const reportsService = {
     const dateFrom = from ? dateStartOfDay(from) : new Date(new Date().getFullYear(), 0, 1)
     const dateTo = to ? dateEndOfDay(to) : new Date()
 
+    // MTS: aggregate from SaleLines (variant + product), not legacy MTO specsJson.
+    // Invoices carry the recognized-at date (issued on deliver).
     const invoices = await prisma.invoice.findMany({
       where: {
         issuedAt: { gte: dateFrom, lte: dateTo },
         status: { notIn: ['CANCELLED', 'DRAFT'] }
       },
       include: {
-        salesOrder: {
-          select: { specsJson: true, packingBagMaterialId: true }
+        sale: {
+          include: {
+            lines: {
+              include: {
+                variant: {
+                  include: { product: { select: { name: true, category: true } } }
+                }
+              }
+            }
+          }
         }
       }
     })
 
-    const materialIds = [...new Set(invoices.map(i => i.salesOrder?.packingBagMaterialId).filter(Boolean) as string[])]
-    const materials = materialIds.length > 0
-      ? await prisma.material.findMany({ where: { id: { in: materialIds } }, select: { id: true, name: true, code: true } })
-      : []
-    const materialNameMap = new Map(materials.map(m => [m.id, `${m.name} (${m.code})`]))
-
-    const productMap = new Map<string, { count: number; qty: number; revenue: number }>()
+    const productMap = new Map<string, { sales: Set<string>; qty: number; revenue: number }>()
 
     for (const inv of invoices) {
-      const rollSubtotal = Math.max(0, Number(inv.subtotal) - (Number(inv.packingBagsSubtotal) || 0))
-      const bagSubtotal = Number(inv.packingBagsSubtotal) || 0
-      const rollQty = Number(inv.quantityDelivered) || 0
-      const bagQty = Number(inv.packingBagsQuantity) || 0
-
-      if (rollSubtotal > 0 || rollQty > 0) {
-        const specs = typeof inv.salesOrder?.specsJson === 'string' ? JSON.parse(inv.salesOrder.specsJson) : inv.salesOrder?.specsJson
-        const raw = (specs as any)
-        const material = (raw?.materialType || raw?.material || 'Printed Rolls') as string
-        const existing = productMap.get(material) || { count: 0, qty: 0, revenue: 0 }
-        existing.count++
-        existing.qty += rollQty
-        existing.revenue += rollSubtotal
-        productMap.set(material, existing)
-      }
-
-      if (bagSubtotal > 0 || bagQty > 0) {
-        const matId = inv.salesOrder?.packingBagMaterialId
-        const bagName = matId ? (materialNameMap.get(matId) || 'Packing Bags') : 'Packing Bags'
-        const existing = productMap.get(bagName) || { count: 0, qty: 0, revenue: 0 }
-        existing.count++
-        existing.qty += bagQty
-        existing.revenue += bagSubtotal
-        productMap.set(bagName, existing)
+      if (!inv.sale) continue
+      for (const line of inv.sale.lines) {
+        const name = `${line.variant.product.name} — ${line.variant.label}`
+        const existing = productMap.get(name) || { sales: new Set<string>(), qty: 0, revenue: 0 }
+        existing.sales.add(inv.sale.id)
+        existing.qty += line.qty
+        // SaleLine.subtotal is VAT-inclusive; report revenue ex-VAT to match invoices.
+        existing.revenue += Number(line.subtotal) - Number(line.vatAmount)
+        productMap.set(name, existing)
       }
     }
 
@@ -326,7 +315,7 @@ export const reportsService = {
     const products: SalesByProductEntry[] = Array.from(productMap.entries())
       .map(([product, data]) => ({
         product,
-        invoiceCount: data.count,
+        invoiceCount: data.sales.size,
         quantityDelivered: data.qty,
         revenue: data.revenue,
         percentage: totalRevenue > 0 ? Math.round((data.revenue / totalRevenue) * 10000) / 100 : 0
@@ -584,10 +573,20 @@ export const reportsService = {
       }
     }
 
-    const openBal = Number(account.openingBalance)
+    // Include child accounts (e.g. Guide-Angel-created 1100-XXX bank ledgers) so
+    // opening/closing balances and movements consolidate the whole subtree.
+    const childAccounts = await prisma.account.findMany({
+      where: { parentId: account.id, isActive: true },
+      select: { id: true, name: true, openingBalance: true }
+    })
+    const accountIds = [account.id, ...childAccounts.map(c => c.id)]
+    const accountNameMap = new Map<string, string>(childAccounts.map(c => [c.id, c.name]))
+    const multiAccount = childAccounts.length > 0
+
+    const openBal = Number(account.openingBalance) + childAccounts.reduce((s, c) => s + Number(c.openingBalance), 0)
     const priorLines = await prisma.journalLine.findMany({
       where: {
-        accountId: account.id,
+        accountId: { in: accountIds },
         journalEntry: { date: { lt: dateFrom } }
       }
     })
@@ -597,11 +596,12 @@ export const reportsService = {
 
     const lines = await prisma.journalLine.findMany({
       where: {
-        accountId: account.id,
+        accountId: { in: accountIds },
         journalEntry: { date: { gte: dateFrom, lte: dateTo } }
       },
       include: {
-        journalEntry: { select: { entryNumber: true, date: true, description: true, reference: true } }
+        journalEntry: { select: { entryNumber: true, date: true, description: true, reference: true } },
+        account: { select: { name: true } }
       },
       orderBy: { journalEntry: { date: 'asc' } }
     })
@@ -609,10 +609,11 @@ export const reportsService = {
     let runningBalance = openingBalance
     const movements: BankMovement[] = lines.map(l => {
       runningBalance += Number(l.debit) - Number(l.credit)
+      const label = multiAccount ? `[${accountNameMap.get(l.accountId) || l.account.name}] ` : ''
       return {
         date: l.journalEntry.date.toISOString().split('T')[0],
         entryNumber: l.journalEntry.entryNumber,
-        description: l.journalEntry.description,
+        description: `${label}${l.journalEntry.description}`,
         reference: l.journalEntry.reference,
         debit: Number(l.debit),
         credit: Number(l.credit),

@@ -349,7 +349,9 @@ export const financeRepository = {
     const cashIn = { opening: 0, closing: 0 }
 
     for (const accountId of cashAccountIds) {
-      const opening = await this.getAccountBalance(accountId)
+      // Opening = everything strictly BEFORE the window start, so
+      // opening + moneyIn − moneyOut == closing holds on the dashboard card.
+      const opening = await this.getAccountBalance(accountId, new Date(dateFrom.getTime() - 1))
       cashIn.opening += opening.balance
 
       const closing = await this.getAccountBalance(accountId, dateTo)
