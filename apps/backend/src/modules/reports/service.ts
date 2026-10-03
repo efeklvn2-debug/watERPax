@@ -179,7 +179,36 @@ export const reportsService = {
       entry.total += balance
     }
 
-    const entries = Array.from(supplierMap.values()).filter(e => e.total > 0)
+    // Supplier credit notes debit 2000 in the GL but never touch invoice
+    // amountPaid — net them here so aging ties to the 2000 balance.
+    const creditNotes = await prisma.supplierCreditNote.findMany({
+      where: { date: { lte: asOfDateObj } },
+      include: { supplier: true },
+      orderBy: { supplier: { name: 'asc' } }
+    })
+    for (const cn of creditNotes) {
+      const daysOverdue = Math.max(0, Math.floor((asOfDateObj.getTime() - new Date(cn.date).getTime()) / (1000 * 60 * 60 * 24)))
+      const balance = -Number(cn.amount)
+      if (!supplierMap.has(cn.supplierId)) {
+        supplierMap.set(cn.supplierId, {
+          id: cn.supplierId,
+          name: cn.supplier?.name || 'Unknown',
+          current: 0,
+          age31to60: 0,
+          age61to90: 0,
+          age90plus: 0,
+          total: 0
+        })
+      }
+      const entry = supplierMap.get(cn.supplierId)!
+      if (daysOverdue <= 30) entry.current += balance
+      else if (daysOverdue <= 60) entry.age31to60 += balance
+      else if (daysOverdue <= 90) entry.age61to90 += balance
+      else entry.age90plus += balance
+      entry.total += balance
+    }
+
+    const entries = Array.from(supplierMap.values()).filter(e => Math.abs(e.total) > 0.005)
     const totalOutstanding = entries.reduce((s, e) => s + e.total, 0)
 
     const buckets: AgingBucket[] = [
@@ -477,7 +506,9 @@ export const reportsService = {
     const dateStr = asOfDateObj.toISOString().split('T')[0]
 
     const inventoryAccount = await prisma.account.findFirst({ where: { code: '1300' } })
-    const packingAccount = await prisma.account.findFirst({ where: { code: '1510' } })
+    // Packaging lives in 1311 (single home — procurement + production post there).
+    // 1510 is dormant legacy and no longer read.
+    const packingAccount = await prisma.account.findFirst({ where: { code: '1311' } })
 
     let glInventoryBalance = 0
     let glPackingBalance = 0

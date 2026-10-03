@@ -53,6 +53,20 @@ export const financeService = {
     return account.id
   },
 
+  // Money received must land in a real cash/bank account (1000/1100 family or
+  // any account flagged isCashAccount) — never an expense or receivable account.
+  async assertCashAccount(db: any, accountId: string): Promise<void> {
+    const account = await (db || prisma).account.findFirst({
+      where: { id: accountId, isActive: true },
+      include: { parent: true }
+    })
+    if (!account) throw new AppError(404, 'NOT_FOUND', 'Bank account not found')
+    const isCash = account.isCashAccount || account.code === '1000' || account.code === '1100' || account.parent?.code === '1100'
+    if (!isCash) {
+      throw new AppError(400, 'INVALID_CASH_ACCOUNT', `${account.name} (${account.code}) is not a cash or bank account`)
+    }
+  },
+
   async getEarliestJournalDate(tx?: any): Promise<Date> {
     const client = tx || prisma
     const earliest = await client.journalEntry.findFirst({
@@ -216,7 +230,7 @@ export const financeService = {
             Number(agg._sum.debit || 0) - Number(agg._sum.credit || 0)
           if (currentBalance - line.credit < -0.01) {
             throw new AppError(400, 'INSUFFICIENT_CASH',
-              `Insufficient funds in ${account.name} (${account.code}). Current balance: ${currentBalance.toFixed(2)}, attempted debit: ${line.credit.toFixed(2)}`)
+              `Insufficient funds in ${account.name} (${account.code}). Current balance: ${currentBalance.toFixed(2)}, attempted credit: ${line.credit.toFixed(2)}`)
           }
         }
       }

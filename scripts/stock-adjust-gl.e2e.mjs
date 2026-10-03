@@ -207,8 +207,8 @@ async function main() {
   assert(findAccountCode(debit6b) === '3000', `Opening Balance decrease Dr 3000 (got ${findAccountCode(debit6b)})`)
   assert(findAccountCode(credit6b) === '1300', `Opening Balance decrease Cr 1300 (got ${findAccountCode(credit6b)})`)
 
-  // ========== TEST 7: PACKAGING material increase -> Cr 3000 (Opening Balance), Dr 1510 ==========
-  log('\n7. Stock increase (PACKAGING) — Dr 1510')
+  // ========== TEST 7: PACKAGING material increase -> Cr 3000 (Opening Balance), Dr 1311 ==========
+  log('\n7. Stock increase (PACKAGING) — Dr 1311')
   r = await admin.api(`/inventory/materials/${pkgMatId}/adjust-stock`, {
     method: 'PATCH', body: { newQuantity: 50, reason: 'Opening Balance', date: today },
   })
@@ -218,7 +218,7 @@ async function main() {
   const entry7 = r.data?.data?.[0]
   const debit7 = entry7.lines.find(l => Number(l.debit) > 0)
   const credit7 = entry7.lines.find(l => Number(l.credit) > 0)
-  assert(findAccountCode(debit7) === '1510', `Packaging increase Dr 1510 (got ${findAccountCode(debit7)})`)
+  assert(findAccountCode(debit7) === '1311', `Packaging increase Dr 1311 (got ${findAccountCode(debit7)})`)
   assert(findAccountCode(credit7) === '3000', `Packaging increase Cr 3000 (got ${findAccountCode(credit7)})`)
 
   // ========== TEST 8: Missing costPrice -> 400 ==========

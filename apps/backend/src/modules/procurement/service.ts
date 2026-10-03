@@ -441,17 +441,36 @@ export const procurementService = {
       const apAccountId = await financeService.getAccountIdByCode('2000')
       const inventoryAccountId = await financeService.getAccountIdByCode(inventoryAccountCode)
 
-      // Post journal entry: Dr AP / Cr Inventory
+      // The original supplier invoice booked Dr inventory (exclusive) + Dr 1400 (VAT)
+      // / Cr 2000 (inclusive). The credit note reverses all three legs: Dr AP for
+      // the full inclusive amount, Cr inventory (exclusive) and Cr 1400 (VAT —
+      // reversing the input-VAT debit means CREDITING 1400).
+      const settings = await prisma.settings.findFirst()
+      const vatRate = settings?.vatRate ? Number(settings.vatRate) : 7.5
+      const { exclusive: exVatAmount, vat: vatPortion } = decomposeInclusive(input.amount, vatRate)
+
+      let vatAccountId: string | undefined
+      if (vatPortion > 0.005) {
+        vatAccountId = await financeService.getAccountByCode('1400').then(a => a.id).catch(() => undefined)
+      }
+
+      const creditToInventory = vatAccountId ? exVatAmount : input.amount
+      const jeLines: { accountId: string; debit: number; credit: number; memo: string }[] = [
+        { accountId: apAccountId, debit: input.amount, credit: 0, memo: `Credit note ${creditNoteNumber}` }
+      ]
+      if (vatAccountId) {
+        jeLines.push({ accountId: vatAccountId, debit: 0, credit: vatPortion, memo: `Input VAT reversed on ${creditNoteNumber}` })
+      }
+      jeLines.push({ accountId: inventoryAccountId, debit: 0, credit: creditToInventory, memo: `Returned to supplier — ${input.reason}` })
+
+      // Post journal entry: Dr AP / Cr Inventory + Cr 1400 Input VAT
       await financeService.postJournalEntry({
         description: `Supplier credit note ${creditNoteNumber} — ${supplier.name}. ${input.reason}`,
         sourceModule: 'PROCUREMENT',
         sourceId: creditNote.id,
         reference: creditNoteNumber,
         date: input.date,
-        lines: [
-          { accountId: apAccountId, debit: input.amount, credit: 0, memo: `Credit note ${creditNoteNumber}` },
-          { accountId: inventoryAccountId, debit: 0, credit: input.amount, memo: `Returned to supplier — ${input.reason}` }
-        ]
+        lines: jeLines
       }, tx)
 
       // If material+quantity specified, decrement stock
