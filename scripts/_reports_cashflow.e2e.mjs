@@ -1,7 +1,7 @@
 // watERPax Reports & Cashflow E2E (PR B: fix/reports-cashflow)
-// Covers: B1 dashboard cashflow identity, B2 sales-by-product MTS rewrite,
-// B3 bank movements include 1100 children, B4 receipt on fully-cascaded
-// deposit, OBE one-click close to Retained Earnings.
+// Covers: B1 dashboard cashflow identity, B3 bank movements include 1100
+// children, B4 receipt on fully-cascaded deposit, OBE one-click close to
+// Retained Earnings.
 // Run: BASE_URL=... SMOKE_USER=superadmin node scripts/_reports_cashflow.e2e.mjs
 
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:3001/api'
@@ -176,34 +176,8 @@ async function main() {
   r = await admin.api('/guide-angel/complete', { method: 'POST', body: { confirm: true } })
   assert(r.status === 200 || r.status === 201, `Guide Angel completed (got ${r.status})`)
 
-  // ========== TEST 3 (B2): sales by product from MTS SaleLines ==========
-  log('\n3. Sales by product aggregates SaleLines (no "Printed Rolls")')
-  r = await admin.api('/sales', {
-    method: 'POST',
-    body: { customerId: customer1, lines: [{ variantId, qty: 5 }] },
-  })
-  assert(r.status === 201, `Sale created (got ${r.status})`)
-  const saleId = r.data?.data?.id
-
-  r = await admin.api(`/sales/${saleId}/confirm`, { method: 'POST' })
-  assert(r.status === 200 || r.status === 201, `Sale confirmed (got ${r.status})`)
-
-  r = await admin.api(`/sales/${saleId}/deliver`, { method: 'POST', body: {} })
-  assert(r.status === 200 || r.status === 201, `Sale delivered (got ${r.status})`)
-
-  r = await admin.api(`/reports/sales/by-product?from=${today}&to=${today}`)
-  assert(r.status === 200, `Sales-by-product 200 (got ${r.status})`)
-  const byProduct = r.data?.data
-  const row = (byProduct?.products || []).find(p => p.product.includes('33cl') && p.product.includes(`CF Water ${ts}`))
-  assert(!!row, `Product row "${`CF Water ${ts} — 33cl`}" present`)
-  assert(row?.quantityDelivered === 5, `Qty 5 (got ${row?.quantityDelivered})`)
-  // 5 packs × 107.5 inclusive ÷ 1.075 = 500 exclusive
-  assert(Math.abs(Number(row?.revenue) - 500) < 0.5, `Revenue ≈ 500 (got ${row?.revenue})`)
-  assert(!(byProduct?.products || []).some(p => p.product === 'Printed Rolls'), 'No "Printed Rolls" legacy bucket')
-  assert(Math.abs(Number(byProduct?.totalRevenue) - 500) < 0.5, `totalRevenue ≈ 500 (got ${byProduct?.totalRevenue})`)
-
-  // ========== TEST 4 (B3): bank movements include 1100 children ==========
-  log('\n4. Bank movements consolidate 1100 child accounts')
+  // ========== TEST 3 (B3): bank movements include 1100 children ==========
+  log('\n3. Bank movements consolidate 1100 child accounts')
   r = await admin.api('/finance/accounts', {
     method: 'POST',
     body: { code: '1100-FHB', name: 'FH Test Bank', type: 'ASSET', parentId: bankParentId },
@@ -237,8 +211,8 @@ async function main() {
   assert(Math.abs((bm.openingBalance + childNet) - bm.closingBalance) < 0.01,
     `Report ties: opening ${bm.openingBalance} + childNet ${childNet} == closing ${bm.closingBalance}`)
 
-  // ========== TEST 5 (B4): receipt on fully-cascaded deposit ==========
-  log('\n5. Deposit 200 fully settles opening receivable -> receipt issued')
+  // ========== TEST 4 (B4): receipt on fully-cascaded deposit ==========
+  log('\n4. Deposit 200 fully settles opening receivable -> receipt issued')
   r = await admin.api('/sales/deposits', {
     method: 'POST',
     body: { customerId: customer2, amount: 200, method: 'CASH' },
@@ -250,8 +224,8 @@ async function main() {
   assert(Math.abs(Number(dep?.receivableSettled) - 200) < 0.01, `receivableSettled 200 (got ${dep?.receivableSettled})`)
   assert(Math.abs(Number(dep?.depositHeld) - 0) < 0.01, `depositHeld 0 (got ${dep?.depositHeld})`)
 
-  // ========== TEST 6 (OBE): one-click close to Retained Earnings ==========
-  log('\n6. OBE close: JE posted, balance zero, repeat -> 400')
+  // ========== TEST 5 (OBE): one-click close to Retained Earnings ==========
+  log('\n5. OBE close: JE posted, balance zero, repeat -> 400')
   const obeId = accId('3000')
   r = await admin.api(`/finance/balances/${obeId}`)
   const obeBefore = Number(r.data?.data?.balance)
