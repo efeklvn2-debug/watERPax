@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore, hasPermission } from '../stores/authStore'
 import { authApi } from '../api/auth'
-import { PhlexMark } from './PhlexMark'
-import { BrandWordmark } from './BrandWordmark'
+import { BrandLockup } from './BrandWordmark'
 import { useNotification } from '../contexts/NotificationContext'
 import QRCode from 'qrcode'
 
@@ -160,6 +159,7 @@ export function Layout({ children }: LayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -281,6 +281,17 @@ export function Layout({ children }: LayoutProps) {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
+  useEffect(() => {
+    if (!dropdownOpen) return
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocMouseDown)
+    return () => document.removeEventListener('mousedown', onDocMouseDown)
+  }, [dropdownOpen])
+
   const user = useAuthStore(s => s.user) ?? { username: 'User', role: 'Unknown' as const, tenantName: undefined as string | undefined }
   const logout = useAuthStore(s => s.logout)
 
@@ -324,10 +335,7 @@ export function Layout({ children }: LayoutProps) {
               </svg>
             </button>
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg text-white flex items-center justify-center shadow-sm shadow-blue-600/30">
-                <PhlexMark className="w-5 h-5" />
-              </div>
-              <BrandWordmark size="md" className="text-slate-800" />
+              <BrandLockup size="md" />
               {user.tenantName && (
                 <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
                   {user.tenantName}
@@ -338,7 +346,7 @@ export function Layout({ children }: LayoutProps) {
 
           <div className="flex items-center space-x-4">
             {/* User Dropdown */}
-            <div className="relative">
+            <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
                 className="flex items-center space-x-2 p-2 rounded-lg hover:bg-slate-100 transition-colors"

@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { authApi } from '../api/auth'
-import { PhlexMark } from '../components/PhlexMark'
-import { BrandWordmark } from '../components/BrandWordmark'
+import { BrandLockup } from '../components/BrandWordmark'
 import QRCode from 'qrcode'
 
 type Phase = 'credentials' | 'twofa' | 'enroll' | 'recovery'
@@ -146,13 +145,13 @@ export function LoginPage() {
       <div className="relative z-10 w-full max-w-[440px]">
         {/* Brand */}
         <div className="flex flex-col items-center text-center mb-10">
-          <div className="w-[4.5rem] h-[4.5rem] rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xl shadow-blue-600/40 ring-1 ring-white/15 mb-6">
-            <PhlexMark className="w-11 h-11" />
-          </div>
           <h1 className="text-white">
-            <BrandWordmark size="xl" />
+            <BrandLockup size="xl" style={{ fontSize: '4.18rem' }} />
           </h1>
-          <p className="text-slate-400 text-base font-medium mt-3 max-w-sm leading-relaxed">
+          <p
+            className="text-slate-400 font-medium mt-3 leading-relaxed whitespace-nowrap"
+            style={{ fontSize: '1.297rem' }}
+          >
             Enterprise manufacturing management system
           </p>
         </div>
