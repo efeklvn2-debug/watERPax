@@ -490,11 +490,11 @@ export function SalesPage() {
             <h1 className="text-2xl font-bold text-slate-900">Sales</h1>
             <p className="text-slate-500 mt-1">Sell from FG stock — draft → confirm → deliver → paid</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search sales..."
-              className="px-3 py-2 text-sm border border-slate-300 rounded-lg" />
+              className="px-3 py-2 text-sm border border-slate-300 rounded-lg flex-1 min-w-[10rem]" />
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white">
+              className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white shrink-0">
               <option value="">All statuses</option>
               <option value="DRAFT">Draft</option>
               <option value="CONFIRMED">Confirmed</option>
@@ -503,7 +503,7 @@ export function SalesPage() {
               <option value="CANCELLED">Cancelled</option>
             </select>
             {canCreate && (
-              <button onClick={() => { setActiveTab('orders'); setShowNew(true); loadProducts() }} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">+ New sale</button>
+              <button onClick={() => { setActiveTab('orders'); setShowNew(true); loadProducts() }} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 whitespace-nowrap shrink-0">+ New sale</button>
             )}
           </div>
         </div>

@@ -182,9 +182,9 @@ export function ProductsPage() {
             <h1 className="text-2xl font-bold text-slate-900">Products</h1>
             <p className="text-slate-500 mt-1">Catalog, variants and bills of materials</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products..."
-              className="px-3 py-2 text-sm border border-slate-300 rounded-lg" />
+              className="px-3 py-2 text-sm border border-slate-300 rounded-lg flex-1 min-w-[10rem]" />
             <div className="flex rounded-lg border border-slate-300 overflow-hidden text-sm">
               <button onClick={() => setCatFilter('')} className={`px-3 py-2 font-medium ${catFilter === '' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'}`}>All</button>
               {CATEGORIES.map(c => (
@@ -198,7 +198,7 @@ export function ProductsPage() {
               Show archived
             </label>
             {canWrite && (
-              <button onClick={() => setShowProduct(!showProduct)} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+              <button onClick={() => setShowProduct(!showProduct)} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 whitespace-nowrap shrink-0">
                 {showProduct ? 'Close' : '+ Product'}
               </button>
             )}
