@@ -8,6 +8,7 @@ import { productsApi, ProductWithVariants } from '../api/products'
 import { financeApi, Account } from '../api/finance'
 import { hasPermission } from '../stores/authStore'
 import { todayLocal } from '../utils/dates'
+import { formatNaira } from '../utils/currency'
 import { useBooksLocked, isDateLocked } from '../hooks/useBooksLocked'
 import { SalesInvoicesTab } from './SalesInvoicesTab'
 import { SalesPaymentsTab } from './SalesPaymentsTab'
@@ -368,7 +369,7 @@ export function SalesPage() {
     const payload: any = unwrap<any>(res)
     const over = Number(payload?.overpayment || 0)
     const casc = Number(payload?.cascadedAmount || 0)
-    notify.success(`Payment recorded${payload?.receiptNumber ? ` (${payload.receiptNumber})` : ''}${casc > 0 ? ` — ₦${casc.toLocaleString()} applied to other outstanding debts` : ''}${over > 0 ? ` — ₦${over.toLocaleString()} held as advance deposit` : ''}`)
+    notify.success(`Payment recorded${payload?.receiptNumber ? ` (${payload.receiptNumber})` : ''}${casc > 0 ? ` — ${formatNaira(casc)} applied to other outstanding debts` : ''}${over > 0 ? ` — ${formatNaira(over)} held as advance deposit` : ''}`)
     setShowPay(false); setPayAmount(''); setPayRef(''); setPayDate(todayLocal())
     load(); refreshSelected(selected.id)
   }

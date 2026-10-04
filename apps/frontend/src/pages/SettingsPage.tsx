@@ -5,6 +5,7 @@ import { inventoryApi, MaterialCategory } from '../api/inventory'
 import { Layout } from '../components/Layout'
 import { useNotification } from '../contexts/NotificationContext'
 import { useMutationGuard } from '../hooks/useMutationGuard'
+import { formatNaira } from '../utils/currency'
 
 type SettingsTab = 'products' | 'overhead' | 'vat' | 'invoice' | 'tax'
 
@@ -342,7 +343,7 @@ const loadSettings = async () => {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600 text-right">
-                        {m.costPrice ? `₦${m.costPrice.toLocaleString()}` : '-'}
+                        {m.costPrice ? formatNaira(m.costPrice) : '-'}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
@@ -794,7 +795,7 @@ const loadSettings = async () => {
                     {overheadHistory.map((h) => (
                       <tr key={h.month}>
                         <td className="px-3 py-2 text-sm text-slate-600">{h.month}</td>
-                        <td className="px-3 py-2 text-sm text-slate-600 text-right">₦{h.ratePerKg.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-sm text-slate-600 text-right">{formatNaira(h.ratePerKg)}</td>
                       </tr>
                     ))}
                 </tbody>
