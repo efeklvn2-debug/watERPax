@@ -336,11 +336,26 @@ export const taxService = {
         if (existingReversal) {
           throw new AppError(400, 'ALREADY_REVERSED', `PAYE journal entry ${posted.entryNumber} was already reversed`)
         }
+        // The accrual JE stays in the ledger (only the memo record is deleted),
+        // so the reversal must carry the accrual's own date: dated today instead,
+        // it lands in a different period than the accrual it cancels and every
+        // P&L window that catches the reversal alone reports negative expenses
+        // and inflated profit. Fall back to today only when that date can no
+        // longer be posted (period locked) — the closed period keeps the
+        // accrual and the correction belongs in the open one.
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+        let reversalDate = fmt(posted.date)
+        try {
+          await financeService.validateJournalDate(posted.date, tx)
+        } catch {
+          reversalDate = fmt(new Date())
+        }
         await financeService.postJournalEntry({
           description: `Reversal of ${posted.entryNumber} - PAYE ${entry.year}-${String(entry.month).padStart(2, '0')}`,
           sourceModule: 'TAX',
           sourceId: `paye-reversal-${entry.id}`,
-          date: new Date().toISOString().split('T')[0],
+          date: reversalDate,
           lines: posted.lines.map(l => ({
             accountId: l.accountId,
             debit: Number(l.credit),

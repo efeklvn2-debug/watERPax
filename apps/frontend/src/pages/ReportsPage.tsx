@@ -9,6 +9,7 @@ import { reportsApi, type ProfitRangeReport, type BalanceSheetReport } from '../
 import { financeApi, type TrialBalance, type AccountBalance } from '../api/finance'
 import { productsApi, type ProductWithVariants } from '../api/products'
 import { dateInputLocal, todayLocal } from '../utils/dates'
+import { formatNaira } from '../utils/currency'
 
 function unwrap<T>(response: { data?: T } | undefined): T | undefined {
   const value: any = response?.data
@@ -16,13 +17,12 @@ function unwrap<T>(response: { data?: T } | undefined): T | undefined {
 }
 
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency: 'NGN',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
+  return formatNaira(amount)
 }
+
+const MONEY_COLUMN = /cost|value|price|amount|revenue|cogs|profit|collected|outstanding|vat/i
+const formatCellNumber = (column: string, n: number): string =>
+  MONEY_COLUMN.test(column) ? formatNaira(n) : n.toLocaleString(undefined, { maximumFractionDigits: 2 })
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-NG', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -200,7 +200,7 @@ function ReportCharts({ name, rows, meta }: { name: ReportName; rows: Row[]; met
         <ChartCard title="Revenue ex-VAT share by variant (₦)">
           <PieChart>
             <Tooltip formatter={(v, n, p) => [
-              `${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })} (gross profit: ${Number((p?.payload as any)?.grossProfit || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })})`,
+              `${formatNaira(Number(v))} (gross profit: ${formatNaira(Number((p?.payload as any)?.grossProfit || 0))})`,
               String(n)
             ]} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -243,7 +243,7 @@ function ReportCharts({ name, rows, meta }: { name: ReportName; rows: Row[]; met
       <div className="mb-6">
         <ChartCard title="Stock value share by variant (₦)">
           <PieChart>
-            <Tooltip formatter={v => Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })} />
+            <Tooltip formatter={v => formatNaira(Number(v))} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={false}>
               {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
@@ -426,7 +426,7 @@ export function ReportsPage() {
                     <tr key={i} className="hover:bg-slate-50">
                       {columns.map(c => (
                         <td key={c} className="px-3 py-1.5 text-slate-700">
-                          {typeof row[c] === 'number' ? (row[c] as number).toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(row[c] ?? '')}
+                          {typeof row[c] === 'number' ? formatCellNumber(c, row[c] as number) : String(row[c] ?? '')}
                         </td>
                       ))}
                     </tr>
@@ -435,7 +435,7 @@ export function ReportsPage() {
                 <tfoot><tr className="border-t-2 border-slate-200 font-semibold">
                   {columns.map((c, i) => (
                     <td key={c} className="px-3 py-2 text-slate-900">
-                      {i === 0 ? 'Total' : (result.totals[c] != null ? Number(result.totals[c]).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '')}
+                      {i === 0 ? 'Total' : (result.totals[c] != null ? formatCellNumber(c, Number(result.totals[c])) : '')}
                     </td>
                   ))}
                 </tr></tfoot>
@@ -452,10 +452,12 @@ export function ReportsPage() {
 function ProfitLossView({ data: rawData, from, to }: { data: ProfitRangeReport | null; from: string; to: string }) {
   if (!rawData) return <EmptyReport />
   const data = rawData
+  // Signed contributions to profit: deductions are negative, so the bars and
+  // the exported rows add up to Net Profit.
   const chartData = [
     { name: 'Revenue', amount: data.breakdown.salesRevenue + data.breakdown.packingRevenue + data.breakdown.otherIncome },
-    { name: 'COGS', amount: data.costOfGoodsSold },
-    { name: 'Expenses', amount: data.expenses },
+    { name: 'COGS', amount: -data.costOfGoodsSold },
+    { name: 'Expenses', amount: -data.expenses },
     { name: 'Net Profit', amount: data.netProfit },
   ]
 
@@ -467,9 +469,9 @@ function ProfitLossView({ data: rawData, from, to }: { data: ProfitRangeReport |
         ['Packing Revenue', String(data.breakdown.packingRevenue)],
         ['Other Income', String(data.breakdown.otherIncome)],
         ['Total Revenue', String(data.revenue)],
-        ['Cost of Goods Sold', String(data.costOfGoodsSold)],
+        ['Cost of Goods Sold', String(-data.costOfGoodsSold)],
         ['Gross Profit', String(data.revenue - data.costOfGoodsSold)],
-        ['Expenses', String(data.expenses)],
+        ['Expenses', String(-data.expenses)],
         ['Net Profit', String(data.netProfit)],
       ]
     )
@@ -531,14 +533,14 @@ function ProfitLossView({ data: rawData, from, to }: { data: ProfitRangeReport |
               {Object.entries(data.expenseBreakdown || {}).filter(([, v]) => v !== 0).map(([key, amount]) => (
                 <tr key={key} className="border-b border-slate-100">
                   <td className="py-2">{key.replace(/([A-Z])/g, ' $1').trim()}</td>
-                  <td className="text-right py-2 font-medium">{formatCurrency(amount)}</td>
-                  <td className="text-right py-2 text-slate-500">{data.revenue > 0 ? Math.round(amount / data.revenue * 100) : 0}%</td>
+                  <td className="text-right py-2 font-medium">{formatCurrency(-amount)}</td>
+                  <td className="text-right py-2 text-slate-500">{data.revenue > 0 ? Math.round(-amount / data.revenue * 100) : 0}%</td>
                 </tr>
               ))}
               <tr className="font-semibold bg-slate-100">
                 <td className="py-2">Total Expenses</td>
-                <td className="text-right py-2">{formatCurrency(data.expenses)}</td>
-                <td className="text-right py-2">{data.revenue > 0 ? Math.round(data.expenses / data.revenue * 100) : 0}%</td>
+                <td className="text-right py-2">{formatCurrency(-data.expenses)}</td>
+                <td className="text-right py-2">{data.revenue > 0 ? Math.round(-data.expenses / data.revenue * 100) : 0}%</td>
               </tr>
             </tbody>
           </table>
@@ -571,9 +573,9 @@ function ProfitLossView({ data: rawData, from, to }: { data: ProfitRangeReport |
             <tr className="border-b border-slate-100"><td className="py-2 font-medium text-slate-700">Packing Revenue</td><td className="text-right py-2">{formatCurrency(data.breakdown.packingRevenue)}</td></tr>
             <tr className="border-b border-slate-100"><td className="py-2 font-medium text-slate-700">Other Income</td><td className="text-right py-2">{formatCurrency(data.breakdown.otherIncome)}</td></tr>
             <tr className="border-b border-slate-100 bg-white"><td className="py-2 font-semibold">Total Revenue</td><td className="text-right py-2 font-semibold">{formatCurrency(data.revenue)}</td></tr>
-            <tr className="border-b border-slate-100"><td className="py-2 font-medium text-red-600">Cost of Goods Sold</td><td className="text-right py-2 text-red-600">({formatCurrency(data.costOfGoodsSold)})</td></tr>
+            <tr className="border-b border-slate-100"><td className="py-2 font-medium text-red-600">Cost of Goods Sold</td><td className="text-right py-2 text-red-600">{formatCurrency(-data.costOfGoodsSold)}</td></tr>
             <tr className="border-b border-slate-100 bg-white"><td className="py-2 font-semibold">Gross Profit</td><td className="text-right py-2 font-semibold">{formatCurrency(data.revenue - data.costOfGoodsSold)}</td></tr>
-            <tr className="border-b border-slate-100"><td className="py-2 font-medium text-red-600">Expenses</td><td className="text-right py-2 text-red-600">({formatCurrency(data.expenses)})</td></tr>
+            <tr className="border-b border-slate-100"><td className="py-2 font-medium text-red-600">Expenses</td><td className={`text-right py-2 ${-data.expenses < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(-data.expenses)}</td></tr>
             <tr className="bg-blue-50"><td className="py-2 font-bold text-lg">Net Profit</td><td className="text-right py-2 font-bold text-lg">{formatCurrency(data.netProfit)}</td></tr>
           </tbody>
         </table>
