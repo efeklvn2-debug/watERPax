@@ -183,7 +183,7 @@ async function main() {
     const allMats = await prisma.material.findMany({ where: { tenantId: tenant!.id } })
     for (const mat of allMats) {
       await prisma.stock.upsert({
-        where: { materialId_location: { materialId: mat.id, location: 'MAIN' } },
+        where: { tenantId_materialId_location: { tenantId: tenant!.id, materialId: mat.id, location: 'MAIN' } },
         update: {},
         create: { materialId: mat.id, quantity: 0, location: 'MAIN', tenantId: tenant!.id }
       })

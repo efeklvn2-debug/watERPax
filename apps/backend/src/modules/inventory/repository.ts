@@ -1,6 +1,7 @@
 ﻿// @ts-nocheck
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../database'
+import { requireTenantId } from '../../middleware/tenant'
 import { Material, Stock, StockMovement, MaterialWithStock, MaterialCategory } from './types'
 import { createChildLogger } from '../../logger'
 
@@ -89,9 +90,15 @@ export const inventoryRepository = {
 
   async getOrCreateStock(materialId: string, location?: string, tx?: any): Promise<Stock> {
     const client = tx || prisma
+    // Tenant-scoped upsert: the unique is [tenantId, materialId, location],
+    // so the where clause itself enforces isolation (unlike the old
+    // [materialId, location] key, which $extends cannot scope — upsert wheres
+    // bypass tenant injection by design, see database/index.ts).
+    const tenantId = requireTenantId()
+    const loc = location || ''
     const stock = await client.stock.upsert({
-      where: { materialId_location: { materialId, location: location || '' } },
-      create: { materialId, quantity: 0, location: location || '' } as any,
+      where: { tenantId_materialId_location: { tenantId, materialId, location: loc } },
+      create: { materialId, quantity: 0, location: loc, tenantId } as any,
       update: {},
       include: { material: true }
     })
