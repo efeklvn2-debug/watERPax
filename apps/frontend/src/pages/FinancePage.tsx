@@ -140,6 +140,24 @@ export function FinancePage() {
 
   const canReverse = hasPermission('finance:write')
 
+  const [closingObe, setClosingObe] = useState(false)
+  const handleCloseObe = async () => {
+    if (!confirm('Close the Opening Balance Equity (3000) balance to Retained Earnings (3100)? A journal entry will be posted.')) return
+    setClosingObe(true)
+    try {
+      const res = await financeApi.zeroObe()
+      if (res.error) notify.error(res.error.message || 'Failed to close OBE')
+      else {
+        notify.success(`OBE closed via ${res.data?.entryNumber}`)
+        await loadDashboard(dashboardPeriod || undefined)
+      }
+    } catch (err: any) {
+      notify.error(err?.message || 'Failed to close OBE')
+    } finally {
+      setClosingObe(false)
+    }
+  }
+
   const drillToJournal = (day?: Date) => {
     const d = day || new Date()
     setJournalDateFrom(dateInputLocal(d))
@@ -733,6 +751,15 @@ export function FinancePage() {
                         Account 3000 has a balance of {formatCurrency(obeBalance)}.
                         This should be zeroed out via retained earnings once all opening balances are verified.
                       </p>
+                      {hasPermission('finance:write') && (
+                        <button
+                          onClick={handleCloseObe}
+                          disabled={closingObe}
+                          className="mt-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {closingObe ? 'Closing…' : 'Close to Retained Earnings'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}

@@ -858,7 +858,28 @@ export const salesService = {
         })
       }
 
-      const receiptHost = paymentTx
+      // Receipt anchor: a fully-cascaded deposit leaves no DEPOSIT row (remainder
+      // 0) and opening-receivable legs create no transaction of their own. Create
+      // one anchor PAYMENT row so the receipt has a required host and the money
+      // shows in the Payments tab (invoice legs already do this for themselves).
+      const legsHaveTx = cascade.legs.some((l: any) => l.paymentTransactionId)
+      let anchorTx: any = paymentTx
+      if (!anchorTx && !legsHaveTx && cascade.receivableSettled > 0.005) {
+        anchorTx = await tx.paymentTransaction.create({
+          data: {
+            customerId: input.customerId,
+            transactionType: 'PAYMENT',
+            paymentMethod: input.method,
+            amount: round2(input.amount),
+            referenceNumber: baseRef,
+            notes: 'Deposit applied to opening receivables',
+            receivedById: userId,
+            tenantId
+          }
+        })
+      }
+
+      const receiptHost = anchorTx
         || (cascade.legs.find(l => l.paymentTransactionId) ? { id: cascade.legs.find(l => l.paymentTransactionId)!.paymentTransactionId } : null)
       let receiptNumber: string | undefined
       if (receiptHost) {
@@ -883,7 +904,7 @@ export const salesService = {
         {
           description: `Deposit from ${customer.name} — ${baseRef}`,
           sourceModule: 'PAYMENT',
-          sourceId: paymentTx?.id,
+          sourceId: anchorTx?.id,
           reference: baseRef,
           postedById: userId,
           date: input.date,
@@ -896,14 +917,14 @@ export const salesService = {
         userId,
         action: 'sale.deposit',
         entityType: 'PaymentTransaction',
-        entityId: paymentTx?.id || receiptHost?.id || input.customerId,
+        entityId: anchorTx?.id || receiptHost?.id || input.customerId,
         description: `Deposit of ${input.amount} from ${customer.name}`,
         metadata: { customerId: input.customerId, amount: input.amount, cascadedAmount: cascade.totalCascaded, receivableSettled: cascade.receivableSettled }
       })
 
       const depositHeld = await availableAdvance(tx, input.customerId)
       return {
-        paymentTransactionId: receiptHost?.id || paymentTx?.id,
+        paymentTransactionId: anchorTx?.id || receiptHost?.id || paymentTx?.id,
         receiptNumber,
         depositHeld,
         overpayment: remainder,

@@ -681,5 +681,33 @@ export const financeService = {
           lines: reversedLines
         }, tx)
     })
+  },
+
+  // One-click cleanup for the dashboard OBE banner: posts the reclass JE
+  // Dr/Cr 3000 vs 3100 Retained Earnings for the account's current balance.
+  async zeroOpeningBalanceEquity(userId?: string) {
+    const obe = await financeRepository.findAccountByCode('3000')
+    if (!obe) throw new AppError(404, 'NOT_FOUND', 'Opening Balance Equity account (3000) not found')
+    const retained = await financeRepository.findAccountByCode('3100')
+    if (!retained) throw new AppError(404, 'NOT_FOUND', 'Retained Earnings account (3100) not found')
+
+    const { balance } = await financeRepository.getAccountBalance(obe.id)
+    if (Math.abs(balance) <= 0.005) {
+      throw new AppError(400, 'OBE_ALREADY_ZERO', 'Opening Balance Equity is already zero')
+    }
+
+    const amount = Math.round(Math.abs(balance) * 100) / 100
+    const entry = await this.postJournalEntry({
+      description: 'Close Opening Balance Equity to Retained Earnings',
+      sourceModule: 'ADJUSTMENT',
+      sourceId: `obe-close-${Date.now()}`,
+      postedById: userId,
+      lines: [
+        { accountId: obe.id, debit: balance < 0 ? amount : 0, credit: balance > 0 ? amount : 0, memo: 'OBE close-out' },
+        { accountId: retained.id, debit: balance > 0 ? amount : 0, credit: balance < 0 ? amount : 0, memo: 'Retained earnings' }
+      ]
+    })
+
+    return { entryNumber: entry.entryNumber, amount, previousBalance: balance }
   }
 }

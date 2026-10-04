@@ -584,10 +584,20 @@ export const reportsService = {
       }
     }
 
-    const openBal = Number(account.openingBalance)
+    // Include child accounts (e.g. Guide-Angel-created 1100-XXX bank ledgers) so
+    // opening/closing balances and movements consolidate the whole subtree.
+    const childAccounts = await prisma.account.findMany({
+      where: { parentId: account.id, isActive: true },
+      select: { id: true, name: true, openingBalance: true }
+    })
+    const accountIds = [account.id, ...childAccounts.map(c => c.id)]
+    const accountNameMap = new Map<string, string>(childAccounts.map(c => [c.id, c.name]))
+    const multiAccount = childAccounts.length > 0
+
+    const openBal = Number(account.openingBalance) + childAccounts.reduce((s, c) => s + Number(c.openingBalance), 0)
     const priorLines = await prisma.journalLine.findMany({
       where: {
-        accountId: account.id,
+        accountId: { in: accountIds },
         journalEntry: { date: { lt: dateFrom } }
       }
     })
@@ -597,11 +607,12 @@ export const reportsService = {
 
     const lines = await prisma.journalLine.findMany({
       where: {
-        accountId: account.id,
+        accountId: { in: accountIds },
         journalEntry: { date: { gte: dateFrom, lte: dateTo } }
       },
       include: {
-        journalEntry: { select: { entryNumber: true, date: true, description: true, reference: true } }
+        journalEntry: { select: { entryNumber: true, date: true, description: true, reference: true } },
+        account: { select: { name: true } }
       },
       orderBy: { journalEntry: { date: 'asc' } }
     })
@@ -609,10 +620,11 @@ export const reportsService = {
     let runningBalance = openingBalance
     const movements: BankMovement[] = lines.map(l => {
       runningBalance += Number(l.debit) - Number(l.credit)
+      const label = multiAccount ? `[${accountNameMap.get(l.accountId) || l.account.name}] ` : ''
       return {
         date: l.journalEntry.date.toISOString().split('T')[0],
         entryNumber: l.journalEntry.entryNumber,
-        description: l.journalEntry.description,
+        description: `${label}${l.journalEntry.description}`,
         reference: l.journalEntry.reference,
         debit: Number(l.debit),
         credit: Number(l.credit),

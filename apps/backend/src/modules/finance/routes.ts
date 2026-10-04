@@ -19,6 +19,7 @@ financeRouter.get('/journal', reportLimiter, requirePermission('finance:read'), 
 financeRouter.get('/journal/:id', requirePermission('finance:read'), financeController.getJournalEntryById)
 financeRouter.post('/journal', mutationLimiter, requirePermission('finance:write'), validateRequest(postJournalEntrySchema), financeController.postJournalEntry)
 financeRouter.post('/journal/:id/reverse', sensitiveLimiter, requirePermission('finance:write'), financeController.reverseJournalEntry)
+financeRouter.post('/obe/close', sensitiveLimiter, requirePermission('finance:write'), financeController.zeroObe)
 
 financeRouter.get('/balances', requirePermission('finance:read'), financeController.getAllAccountBalances)
 financeRouter.get('/balances/:id', requirePermission('finance:read'), financeController.getAccountBalance)
