@@ -836,9 +836,8 @@ export const salesService = {
 
       let debitAccountId: string
       if (input.bankAccountId) {
-        const bank = await tx.account.findFirst({ where: { id: input.bankAccountId, isActive: true }, select: { id: true } })
-        if (!bank) throw new AppError(404, 'NOT_FOUND', 'Bank account not found')
-        debitAccountId = bank.id
+        await financeService.assertCashAccount(tx, input.bankAccountId)
+        debitAccountId = input.bankAccountId
       } else {
         debitAccountId = await getAccountId(tx, input.method === 'CASH' ? CASH_ACCOUNT : BANK_ACCOUNT)
       }
@@ -979,9 +978,8 @@ export const salesService = {
         refundMethodForJE = 'Cash'
       } else if (refundMethod === 'BANK') {
         if (input.bankAccountId) {
-          const bank = await tx.account.findFirst({ where: { id: input.bankAccountId, isActive: true }, select: { id: true } })
-          if (!bank) throw new AppError(404, 'NOT_FOUND', 'Bank account not found')
-          refundAccountId = bank.id
+          await financeService.assertCashAccount(tx, input.bankAccountId)
+          refundAccountId = input.bankAccountId
         } else {
           refundAccountId = await getAccountId(tx, BANK_ACCOUNT)
         }
@@ -1463,12 +1461,8 @@ async function recordPaymentTx(
 
   let debitAccountId: string
   if (input.bankAccountId) {
-    const bank = await tx.account.findFirst({
-      where: { id: input.bankAccountId, isActive: true },
-      select: { id: true }
-    })
-    if (!bank) throw new AppError(404, 'NOT_FOUND', 'Bank account not found')
-    debitAccountId = bank.id
+    await financeService.assertCashAccount(tx, input.bankAccountId)
+    debitAccountId = input.bankAccountId
   } else {
     debitAccountId = await getAccountId(tx, input.method === 'CASH' ? CASH_ACCOUNT : BANK_ACCOUNT)
   }

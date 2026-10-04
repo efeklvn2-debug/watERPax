@@ -175,14 +175,6 @@ export const taxService = {
     const netProfit = totalRevenue - cogs - totalExpenses
     const citAmount = netProfit * settings.citRate
 
-    const existing = await prisma.taxProvision.findFirst({
-      where: { year, tenantId: getCurrentTenantId()! },
-    })
-
-    if (existing && existing.posted) {
-      throw new AppError(400, 'CONFLICT', `CIT provision for ${year} has already been posted`)
-    }
-
     if (netProfit <= 0) {
       throw new AppError(400, 'NO_PROFIT', `No taxable profit for ${year} (net ${netProfit.toFixed(2)}). Nothing to provide.`)
     }
@@ -195,6 +187,15 @@ export const taxService = {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      // Posted-check inside the transaction so two concurrent posts can't both
+      // pass a pre-transaction read and double-provision (TOCTOU).
+      const existing = await tx.taxProvision.findFirst({
+        where: { year, tenantId: getCurrentTenantId()! },
+      })
+      if (existing && existing.posted) {
+        throw new AppError(400, 'CONFLICT', `CIT provision for ${year} has already been posted`)
+      }
+
       const je = await financeService.postJournalEntry({
         description: `CIT provision for FY ${year} (net profit: ${netProfit.toFixed(2)} × ${settings.citRate * 100}% = ${citAmount.toFixed(2)})`,
         sourceModule: 'TAX',
@@ -259,23 +260,45 @@ export const taxService = {
   },
 
   async addPayeEntry(input: PayeEntryInput, userId: string): Promise<PayeSummaryEntry> {
-    const existing = await prisma.payeEntry.findFirst({
-      where: { year: input.year, month: input.month, tenantId: getCurrentTenantId()! },
-    })
-    if (existing) {
-      throw new AppError(409, 'CONFLICT', `PAYE entry already exists for ${input.year}-${String(input.month).padStart(2, '0')}`)
-    }
+    const entry = await prisma.$transaction(async (tx) => {
+      const existing = await tx.payeEntry.findFirst({
+        where: { year: input.year, month: input.month, tenantId: getCurrentTenantId()! },
+      })
+      if (existing) {
+        throw new AppError(409, 'CONFLICT', `PAYE entry already exists for ${input.year}-${String(input.month).padStart(2, '0')}`)
+      }
 
-    const entry = await prisma.payeEntry.create({
-      data: {
-        period: input.period,
-        year: input.year,
-        month: input.month,
-        amount: input.amount as any,
-        pension: (input.pension || 0) as any,
-        description: input.description,
-        recordedById: userId,
-      } as any,
+      const created = await tx.payeEntry.create({
+        data: {
+          period: input.period,
+          year: input.year,
+          month: input.month,
+          amount: input.amount as any,
+          pension: (input.pension || 0) as any,
+          description: input.description,
+          recordedById: userId,
+        } as any,
+      })
+
+      // Post the payroll cost to the ledger: Dr 6300 Salaries / Cr 2300 PAYE Payable.
+      // PAYE was previously memo-only and never reached the GL/P&L.
+      const salaryAccountId = await financeService.getAccountIdByCode('6300')
+      const payeAccountId = await financeService.getAccountIdByCode('2300')
+      const lastDay = new Date(input.year, input.month, 0).getDate()
+      const jeDate = `${input.year}-${String(input.month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      await financeService.postJournalEntry({
+        description: `PAYE ${input.year}-${String(input.month).padStart(2, '0')}${input.description ? ` — ${input.description}` : ''}`,
+        sourceModule: 'TAX',
+        sourceId: `paye-${created.id}`,
+        date: jeDate,
+        lines: [
+          { accountId: salaryAccountId, debit: Number(input.amount), credit: 0, memo: 'PAYE expense' },
+          { accountId: payeAccountId, debit: 0, credit: Number(input.amount), memo: 'PAYE payable' },
+        ],
+        postedById: userId,
+      }, tx)
+
+      return created
     })
 
     logger.info({ year: input.year, month: input.month, amount: input.amount }, 'PAYE entry recorded')
@@ -293,12 +316,44 @@ export const taxService = {
   },
 
   async deletePayeEntry(id: string): Promise<void> {
-    const deleted = await prisma.payeEntry.deleteMany({
-      where: { id, tenantId: getCurrentTenantId()! },
+    await prisma.$transaction(async (tx) => {
+      const entry = await tx.payeEntry.findFirst({
+        where: { id, tenantId: getCurrentTenantId()! },
+      })
+      if (!entry) {
+        throw new AppError(404, 'NOT_FOUND', 'PAYE entry not found')
+      }
+
+      // Reverse the posted JE so the ledger stays consistent with the memo record.
+      const posted = await tx.journalEntry.findFirst({
+        where: { sourceId: `paye-${entry.id}`, sourceModule: 'TAX' },
+        include: { lines: true },
+      })
+      if (posted) {
+        const existingReversal = await tx.journalEntry.findFirst({
+          where: { description: { startsWith: `Reversal of ${posted.entryNumber}` } },
+        })
+        if (existingReversal) {
+          throw new AppError(400, 'ALREADY_REVERSED', `PAYE journal entry ${posted.entryNumber} was already reversed`)
+        }
+        await financeService.postJournalEntry({
+          description: `Reversal of ${posted.entryNumber} - PAYE ${entry.year}-${String(entry.month).padStart(2, '0')}`,
+          sourceModule: 'TAX',
+          sourceId: `paye-reversal-${entry.id}`,
+          date: new Date().toISOString().split('T')[0],
+          lines: posted.lines.map(l => ({
+            accountId: l.accountId,
+            debit: Number(l.credit),
+            credit: Number(l.debit),
+            memo: l.memo || undefined,
+          })),
+        }, tx)
+      }
+
+      await tx.payeEntry.deleteMany({
+        where: { id: entry.id, tenantId: getCurrentTenantId()! },
+      })
     })
-    if (deleted.count === 0) {
-      throw new AppError(404, 'NOT_FOUND', 'PAYE entry not found')
-    }
   },
 
   async getFilingPack(year: number): Promise<FilingPack> {
