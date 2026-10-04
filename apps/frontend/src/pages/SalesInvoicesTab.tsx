@@ -3,6 +3,7 @@ import { useNotification } from '../contexts/NotificationContext'
 import { salesApi, SalesInvoice, Sale } from '../api/sales'
 import { hasPermission } from '../stores/authStore'
 import { todayLocal } from '../utils/dates'
+import { formatNaira } from '../utils/currency'
 import { useBooksLocked, isDateLocked } from '../hooks/useBooksLocked'
 
 function money(value: number | null | undefined) {
@@ -214,7 +215,7 @@ export function SalesInvoicesTab() {
     const payload: any = (res.data as any)?.data || res.data
     const over = Number(payload?.overpayment || 0)
     const casc = Number(payload?.cascadedAmount || 0)
-    notify.success(`Payment recorded${payload?.receiptNumber ? ` (${payload.receiptNumber})` : ''}${casc > 0 ? ` — ₦${casc.toLocaleString()} applied to other outstanding debts` : ''}${over > 0 ? ` — ₦${over.toLocaleString()} held as advance deposit` : ''}`)
+    notify.success(`Payment recorded${payload?.receiptNumber ? ` (${payload.receiptNumber})` : ''}${casc > 0 ? ` — ${formatNaira(casc)} applied to other outstanding debts` : ''}${over > 0 ? ` — ${formatNaira(over)} held as advance deposit` : ''}`)
     setShowPay(false); setPayAmount(''); setPayRef(''); setPayDate(todayLocal())
     load()
     refreshSale()

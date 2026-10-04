@@ -4,6 +4,7 @@ import { useNotification } from '../contexts/NotificationContext'
 import { productsApi, ProductWithVariants, ProductVariant, BOMLine } from '../api/products'
 import { inventoryApi, MaterialWithStock } from '../api/inventory'
 import { hasPermission } from '../stores/authStore'
+import { formatNaira } from '../utils/currency'
 
 function unwrap<T>(response: { data?: T } | undefined): T | undefined {
   const value: any = response?.data
@@ -11,7 +12,7 @@ function unwrap<T>(response: { data?: T } | undefined): T | undefined {
 }
 
 function money(value: number | null | undefined) {
-  return `₦${(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  return formatNaira(value)
 }
 
 const CATEGORIES = ['BOTTLED', 'SACHET', 'JAR'] as const

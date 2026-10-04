@@ -4,6 +4,7 @@ import { Layout } from '../components/Layout'
 import { useNotification } from '../contexts/NotificationContext'
 import { customersApi, Customer, CustomerBalance } from '../api/customers'
 import { hasPermission } from '../stores/authStore'
+import { formatNaira } from '../utils/currency'
 
 function unwrap<T>(response: { data?: T } | undefined): T | undefined {
   const value: any = response?.data
@@ -137,13 +138,13 @@ export function CustomersPage() {
                         <p className="text-sm text-slate-500 truncate">{c.phone || ''}</p>
                       </div>
                       <div className="col-span-2 text-right text-sm text-slate-700 font-mono">
-                        {b ? `₦${b.totalInvoiced.toLocaleString()}` : '—'}
+                        {b ? formatNaira(b.totalInvoiced) : '—'}
                       </div>
                       <div className="col-span-2 text-right text-sm font-mono">
-                        {b ? <span className={b.balanceDue > 0 ? 'text-red-600 font-medium' : 'text-slate-700'}>₦{b.balanceDue.toLocaleString()}</span> : '—'}
+                        {b ? <span className={b.balanceDue > 0 ? 'text-red-600 font-medium' : 'text-slate-700'}>{formatNaira(b.balanceDue)}</span> : '—'}
                       </div>
                       <div className="col-span-2 text-right text-sm text-blue-700 font-mono">
-                        {b ? `₦${b.depositHeld.toLocaleString()}` : '—'}
+                        {b ? formatNaira(b.depositHeld) : '—'}
                       </div>
                       <div className="col-span-1 text-right text-sm font-mono">
                         {b ? <span className={b.jarBalance < 0 ? 'text-amber-600' : b.jarBalance > 0 ? 'text-emerald-600' : 'text-slate-700'}>{b.jarBalance}</span> : '—'}

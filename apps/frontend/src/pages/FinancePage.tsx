@@ -8,14 +8,10 @@ import { settingsApi } from '../api/settings'
 import { taxApi, TaxSummary, CitProvisionResult, PayeEntry } from '../api/tax'
 import { hasPermission } from '../stores/authStore'
 import { dateInputLocal, todayLocal } from '../utils/dates'
+import { formatNaira } from '../utils/currency'
 
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency: 'NGN',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
+  return formatNaira(amount)
 }
 
 function formatDate(dateStr: string): string {
@@ -556,7 +552,7 @@ export function FinancePage() {
     const totalDebit = journalLines.reduce((s, l) => s + l.debit, 0)
     const totalCredit = journalLines.reduce((s, l) => s + l.credit, 0)
     if (Math.abs(totalDebit - totalCredit) > 0.01) {
-      notify.error(`Total debits (${totalDebit.toFixed(2)}) must equal total credits (${totalCredit.toFixed(2)})`)
+      notify.error(`Total debits (${formatCurrency(totalDebit)}) must equal total credits (${formatCurrency(totalCredit)})`)
       return
     }
 
@@ -940,8 +936,8 @@ export function FinancePage() {
                     return (
                       <div className="mt-3 h-2 w-full bg-slate-100 rounded-full overflow-hidden flex">
                         <div className="bg-green-400 transition-all" style={{ width: '100%' }} />
-                        <div className="bg-red-400 transition-all" style={{ width: `${Math.min(100, (cogs / rev) * 100)}%` }} />
-                        <div className="bg-orange-400 transition-all" style={{ width: `${Math.min(100, (exp / rev) * 100)}%` }} />
+                        <div className="bg-red-400 transition-all" style={{ width: `${Math.min(100, Math.max(0, (cogs / rev) * 100))}%` }} />
+                        <div className="bg-orange-400 transition-all" style={{ width: `${Math.min(100, Math.max(0, (exp / rev) * 100))}%` }} />
                         <div className={`${profit >= 0 ? 'bg-blue-400' : 'bg-red-600'} transition-all`}
                           style={{ width: `${Math.min(100, Math.max(0, (profit / rev) * 100))}%` }} />
                       </div>
@@ -1518,11 +1514,11 @@ export function FinancePage() {
                   </div>
                   <div className="bg-red-50 rounded-xl border border-red-200 p-4">
                     <p className="text-sm text-red-600 font-medium">Cost of Goods Sold</p>
-                    <p className="text-2xl font-bold text-red-700 mt-1">-{formatCurrency(profitSummary?.costOfGoodsSold ?? 0)}</p>
+                    <p className="text-2xl font-bold text-red-700 mt-1">{formatCurrency(-(profitSummary?.costOfGoodsSold ?? 0))}</p>
                   </div>
                   <div className="bg-orange-50 rounded-xl border border-orange-200 p-4">
                     <p className="text-sm text-orange-600 font-medium">Total Expenses</p>
-                    <p className="text-2xl font-bold text-orange-700 mt-1">-{formatCurrency(profitSummary?.expenses ?? 0)}</p>
+                    <p className="text-2xl font-bold text-orange-700 mt-1">{formatCurrency(-(profitSummary?.expenses ?? 0))}</p>
                   </div>
                   <div className="bg-blue-50 rounded-xl border border-blue-200 p-4">
                     <p className="text-sm text-blue-600 font-medium">Net Profit</p>
@@ -1558,7 +1554,7 @@ export function FinancePage() {
                     <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Cost of Goods Sold</h3>
                     <div className="flex justify-between py-2 border-b border-slate-100">
                       <span className="text-slate-700">Total COGS</span>
-                      <span className="font-medium text-red-700">-{formatCurrency(profitSummary?.costOfGoodsSold ?? 0)}</span>
+                      <span className="font-medium text-red-700">{formatCurrency(-(profitSummary?.costOfGoodsSold ?? 0))}</span>
                     </div>
                     <div className="flex justify-between py-2 font-bold">
                       <span className="text-slate-900">Gross Profit</span>
@@ -1575,13 +1571,13 @@ export function FinancePage() {
                       {Object.entries(profitSummary?.expenseBreakdown ?? {}).map(([code, amount]) => (
                         <div key={code} className="flex justify-between py-1 border-b border-slate-100 text-sm">
                           <span className="text-slate-700">{code}</span>
-                          <span className="font-medium text-red-700">{formatCurrency(amount)}</span>
+                          <span className={`font-medium ${amount > 0 ? 'text-red-700' : 'text-green-700'}`}>{formatCurrency(-amount)}</span>
                         </div>
                       ))}
                     </div>
                     <div className="flex justify-between py-2 font-bold mt-2 border-t border-slate-200">
                       <span className="text-slate-900">Total Expenses</span>
-                      <span className="text-red-700">-{formatCurrency(profitSummary?.expenses ?? 0)}</span>
+                      <span className={-(profitSummary?.expenses ?? 0) < 0 ? 'text-red-700' : 'text-green-700'}>{formatCurrency(-(profitSummary?.expenses ?? 0))}</span>
                     </div>
                   </div>
                 </div>
@@ -2103,8 +2099,8 @@ export function FinancePage() {
                     <tfoot className="bg-slate-50">
                       <tr>
                         <td className="px-3 py-2 text-sm font-medium text-slate-700">Totals</td>
-                        <td className="px-3 py-2 text-sm font-bold text-right text-slate-900">{journalLines.reduce((s, l) => s + l.debit, 0).toFixed(2)}</td>
-                        <td className="px-3 py-2 text-sm font-bold text-right text-slate-900">{journalLines.reduce((s, l) => s + l.credit, 0).toFixed(2)}</td>
+                        <td className="px-3 py-2 text-sm font-bold text-right text-slate-900">{formatCurrency(journalLines.reduce((s, l) => s + l.debit, 0))}</td>
+                        <td className="px-3 py-2 text-sm font-bold text-right text-slate-900">{formatCurrency(journalLines.reduce((s, l) => s + l.credit, 0))}</td>
                         <td colSpan={2} />
                       </tr>
                       {Math.abs(journalLines.reduce((s, l) => s + l.debit, 0) - journalLines.reduce((s, l) => s + l.credit, 0)) > 0.01 && (

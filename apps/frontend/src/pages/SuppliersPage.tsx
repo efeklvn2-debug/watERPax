@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { suppliersApi, Supplier } from '../api/suppliers'
 import { Layout } from '../components/Layout'
 import { useNotification } from '../contexts/NotificationContext'
+import { formatNaira } from '../utils/currency'
 
 export function SuppliersPage() {
   const notify = useNotification()
@@ -145,8 +146,8 @@ export function SuppliersPage() {
                 {filtered.map(supplier => (
                   <tr key={supplier.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-slate-900">{supplier.name}</td>
-                    <td className={`px-6 py-4 text-sm text-right font-mono ${supplier.outstandingBalance != null && supplier.outstandingBalance < 0 ? 'text-red-600 font-semibold' : ''}`}>{supplier.outstandingBalance != null ? `₦${Number(supplier.outstandingBalance).toLocaleString()}` : '-'}</td>
-                    <td className="px-6 py-4 text-sm text-right font-mono">{supplier.totalBilled != null ? `₦${Number(supplier.totalBilled).toLocaleString()}` : '-'}</td>
+                    <td className={`px-6 py-4 text-sm text-right font-mono ${supplier.outstandingBalance != null && supplier.outstandingBalance < 0 ? 'text-red-600 font-semibold' : ''}`}>{supplier.outstandingBalance != null ? formatNaira(Number(supplier.outstandingBalance)) : '-'}</td>
+                    <td className="px-6 py-4 text-sm text-right font-mono">{supplier.totalBilled != null ? formatNaira(Number(supplier.totalBilled)) : '-'}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">{supplier.email || '-'}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">{supplier.phone || '-'}</td>
                     <td className="px-6 py-4">

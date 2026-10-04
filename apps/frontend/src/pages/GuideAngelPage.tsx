@@ -7,6 +7,7 @@ import {
   GuideAngelSession, GuideAngelStockRow, GuideAngelSummary, GuideAngelVariantRow
 } from '../api/guideAngel'
 import { todayLocal } from '../utils/dates'
+import { formatNaira } from '../utils/currency'
 
 const today = todayLocal()
 
@@ -21,7 +22,7 @@ function unwrap<T>(response: { data?: T } | undefined): T | undefined {
 }
 
 function money(value: number | undefined) {
-  return `N${(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return formatNaira(value)
 }
 
 function Field({ label, value, onChange, type = 'text', placeholder, min, hint }: {
