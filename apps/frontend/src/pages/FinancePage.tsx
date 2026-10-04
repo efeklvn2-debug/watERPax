@@ -1292,9 +1292,9 @@ export function FinancePage() {
                         Reset
                       </button>
                     )}
-                    <div className="ml-auto flex items-center gap-3">
+                    <div className="ml-auto flex flex-wrap items-center gap-3">
                       {hasPermission('finance:manage_accounts') && (
-                        <div className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-1.5 bg-white">
+                        <div className="flex flex-wrap items-center gap-2 border border-slate-300 rounded-lg px-3 py-1.5 bg-white">
                           <span className="text-xs text-slate-500 font-medium">Period Lock</span>
                           <DateInput value={lockDate}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLockDate(e.target.value)}
@@ -1315,22 +1315,22 @@ export function FinancePage() {
                           )}
                         </div>
                       )}
-                      <button onClick={() => setShowJournalModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors">
+                      <button onClick={() => setShowJournalModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors whitespace-nowrap shrink-0">
                         + Post Journal Entry
                       </button>
                     </div>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full min-w-[760px]">
                     <thead className="bg-slate-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Entry #</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Description</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Source</th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Debit</th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Credit</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Date</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Entry #</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Description</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Source</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Debit</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Credit</th>
                         {canReverse && <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Actions</th>}
                       </tr>
                     </thead>
@@ -1341,14 +1341,14 @@ export function FinancePage() {
                         </tr>
                       ) : journalEntries.map(entry => (
                         <tr key={entry.id} className="hover:bg-slate-50">
-                          <td className="px-6 py-4 text-sm text-slate-900">{formatDate(entry.date)}</td>
-                          <td className="px-6 py-4 text-sm font-mono">
+                          <td className="px-6 py-4 text-sm text-slate-900 whitespace-nowrap">{formatDate(entry.date)}</td>
+                          <td className="px-6 py-4 text-sm font-mono whitespace-nowrap">
                             <button onClick={() => setSelectedEntry(entry)} className="text-blue-600 hover:text-blue-800 hover:underline">
                               {entry.entryNumber}
                             </button>
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-900">{entry.description}</td>
-                          <td className="px-6 py-4 text-sm text-slate-500">{entry.sourceModule}</td>
+                          <td className="px-6 py-4 text-sm text-slate-500 whitespace-nowrap">{entry.sourceModule}</td>
                           <td className="px-6 py-4 text-sm text-right text-slate-900">
                             {formatCurrency(entry.lines?.reduce((sum, l) => sum + Number(l.debit), 0) ?? 0)}
                           </td>
