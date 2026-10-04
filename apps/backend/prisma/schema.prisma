@@ -288,7 +288,7 @@ model Stock {
   tenant     Tenant          @relation(fields: [tenantId], references: [id])
   movements  StockMovement[]
 
-  @@unique([materialId, location])
+  @@unique([tenantId, materialId, location])
   @@index([materialId])
   @@index([tenantId])
 }

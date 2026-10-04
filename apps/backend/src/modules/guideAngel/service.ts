@@ -261,7 +261,7 @@ export const guideAngelService = {
         if (totalQty <= 0) continue
 
         let stock = await tx.stock.findFirst({ where: { materialId: material.id, location: 'MAIN' } })
-        if (!stock) stock = await tx.stock.create({ data: { materialId: material.id, location: 'MAIN', quantity: 0 } as any })
+        if (!stock) stock = await tx.stock.create({ data: { materialId: material.id, location: 'MAIN', quantity: 0, tenantId: session.tenantId } as any })
         await tx.stock.update({ where: { id: stock.id }, data: { quantity: { increment: totalQty } } })
 
         await tx.stockMovement.create({
