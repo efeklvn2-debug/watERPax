@@ -43,6 +43,9 @@ COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/packages/types/package.json /app/packages/types/package.json
 COPY --from=build /app/packages/types/dist /app/packages/types/dist
 COPY --from=build /app/apps/backend/package.json package.json
+# tsconfig + src: prisma/seed.ts imports ../src/* and runs via tsx in this image
+COPY --from=build /app/apps/backend/tsconfig.json tsconfig.json
+COPY --from=build /app/apps/backend/src src
 COPY --from=build /app/apps/backend/dist dist
 COPY --from=build /app/apps/backend/prisma prisma
 
