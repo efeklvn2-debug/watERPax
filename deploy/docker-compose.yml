@@ -1,0 +1,60 @@
+# watERPax production stack (runs alongside FlexoPrint on the same VPS).
+# FlexoPrint (phlexerp-backend:3000, DB flexoprint) is untouched: this stack
+# binds only to 127.0.0.1:8088, which the host nginx proxies for
+# waterpax.com.ng (TLS terminated there via certbot/Cloudflare).
+#
+# Copy .env.example to .env next to this file before first start.
+
+name: waterpax
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: waterpax
+      POSTGRES_USER: waterpax
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waterpax -d waterpax"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    # Image names come from deploy/.env (BACKEND_IMAGE / WEB_IMAGE) —
+    # see .env.example. Or build locally by uncommenting `build:` below.
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE in deploy/.env}
+    # build:
+    #   context: ..
+    #   dockerfile: apps/backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://waterpax:${POSTGRES_PASSWORD}@postgres:5432/waterpax?schema=public
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in deploy/.env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in deploy/.env}
+      CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN in deploy/.env}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+  web:
+    image: ${WEB_IMAGE:?set WEB_IMAGE in deploy/.env}
+    # build:
+    #   context: ..
+    #   dockerfile: apps/frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      # Loopback only: host nginx terminates TLS and proxies here.
+      - "127.0.0.1:8088:80"
+
+volumes:
+  pgdata:
