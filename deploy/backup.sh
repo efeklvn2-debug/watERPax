@@ -38,7 +38,7 @@ else
   ENC="$OUT.enc"
   openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass file:"$KEYFILE" -in "$OUT" -out "$ENC"
   if rclone copy "$ENC" "r2:$R2_BUCKET/" >> "$BACKUP_DIR/backup.log" 2>&1 \
-     && rclone ls "r2:$R2_BUCKET" "$(basename "$ENC")" >/dev/null 2>&1; then
+     && rclone ls "r2:$R2_BUCKET/$(basename "$ENC")" >/dev/null 2>&1; then
     rm -f "$ENC"
     rclone delete "r2:$R2_BUCKET" --min-age 30d --quiet >> "$BACKUP_DIR/backup.log" 2>&1 || true
     echo "$(date '+%Y-%m-%d %H:%M:%S') UPLOADED r2:$R2_BUCKET/$(basename "$ENC")"
