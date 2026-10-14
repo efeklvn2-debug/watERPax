@@ -133,6 +133,8 @@ export interface LedgerTransaction {
   credit: number
   balance: number
   memo: string | null
+  accountCode?: string
+  accountName?: string
 }
 
 export interface GeneralLedger {
@@ -142,8 +144,11 @@ export interface GeneralLedger {
     name: string
     type: string
   }
+  hasChildren: boolean
   openingBalance: number
   closingBalance: number
+  ownOpeningBalance: number
+  ownClosingBalance: number
   transactions: LedgerTransaction[]
   children: { accountId: string; accountCode: string; accountName: string; balance: number }[]
   childrenTotal: number

@@ -529,17 +529,42 @@ export const financeService = {
     const account = await financeRepository.findAccountById(accountId)
     if (!account) throw new AppError(404, 'NOT_FOUND', 'Account not found')
 
+    // Collect all descendants so a parent account's ledger consolidates its
+    // subtree (e.g. 1000 shows 1000-XXX cash children), matching the
+    // consolidated balance shown on the Balances page.
+    const descendantIds: string[] = []
+    const collectDescendants = async (parentId: string) => {
+      const kids = await prisma.account.findMany({ where: { parentId, isActive: true }, select: { id: true } })
+      for (const kid of kids) {
+        descendantIds.push(kid.id)
+        await collectDescendants(kid.id)
+      }
+    }
+    await collectDescendants(accountId)
+    const hasChildren = descendantIds.length > 0
+
     // Opening anchor for the running balance. With a date filter this is the
-    // balance *before* the range; without one it must be the static account
-    // opening only — getAccountBalance with no asOf sums every line ever,
-    // and adding the (also unfiltered) lines on top would double-count.
-    const openingBalance = dateFrom
-      ? await financeRepository.getAccountBalance(accountId, dateStartOfDay(dateFrom))
-      : {
-          openingBalance: Number(account.openingBalance ?? 0),
-          totalDebit: 0,
-          totalCredit: 0
-        }
+    // consolidated balance *before* the range; without one it is the static
+    // openings only — summing every line ever here AND including the (also
+    // unfiltered) lines below would double-count.
+    let consolidatedOpening: number
+    let ownOpening: number
+    if (dateFrom) {
+      const own = await financeRepository.getAccountBalance(accountId, dateStartOfDay(dateFrom))
+      ownOpening = own.openingBalance + own.totalDebit - own.totalCredit
+      consolidatedOpening = ownOpening
+      for (const childId of descendantIds) {
+        const child = await financeRepository.getAccountBalance(childId, dateStartOfDay(dateFrom))
+        consolidatedOpening += child.openingBalance + child.totalDebit - child.totalCredit
+      }
+    } else {
+      const openingRows = await prisma.account.findMany({
+        where: { id: { in: [accountId, ...descendantIds] } },
+        select: { openingBalance: true }
+      })
+      consolidatedOpening = openingRows.reduce((sum, row) => sum + Number(row.openingBalance ?? 0), 0)
+      ownOpening = Number(account.openingBalance ?? 0)
+    }
 
     const childBalances = await financeRepository.getChildBalances(
       accountId,
@@ -548,7 +573,7 @@ export const financeService = {
 
     const entries = await prisma.journalLine.findMany({
       where: {
-        accountId,
+        accountId: hasChildren ? { in: [accountId, ...descendantIds] } : accountId,
         journalEntry: {
           date: {
             ...(dateFrom && { gte: dateStartOfDay(dateFrom) }),
@@ -556,14 +581,17 @@ export const financeService = {
           }
         }
       },
-      include: { journalEntry: true },
+      include: { journalEntry: true, account: true },
       orderBy: { journalEntry: { date: 'asc' } }
     })
 
-    let runningBalance = openingBalance.openingBalance + openingBalance.totalDebit - openingBalance.totalCredit
+    let runningBalance = consolidatedOpening
+    let ownClosing = ownOpening
 
     const transactions = entries.map((line: any) => {
-      runningBalance += Number(line.debit) - Number(line.credit)
+      const delta = Number(line.debit) - Number(line.credit)
+      runningBalance += delta
+      if (line.accountId === account.id) ownClosing += delta
       return {
         date: line.journalEntry.date,
         entryNumber: line.journalEntry.entryNumber,
@@ -572,7 +600,9 @@ export const financeService = {
         debit: Number(line.debit),
         credit: Number(line.credit),
         balance: runningBalance,
-        memo: line.memo
+        memo: line.memo,
+        accountCode: line.account.code,
+        accountName: line.account.name
       }
     })
 
@@ -583,15 +613,20 @@ export const financeService = {
         name: account.name,
         type: account.type
       },
-      openingBalance: openingBalance.openingBalance,
+      // With children, opening/closing (and every running balance in
+      // transactions) are consolidated across the subtree. own* values keep
+      // the parent-only figures for the breakdown.
+      hasChildren,
+      openingBalance: consolidatedOpening,
       closingBalance: runningBalance,
+      ownOpeningBalance: ownOpening,
+      ownClosingBalance: ownClosing,
       transactions,
-      // Parent-child breakdown: the ledger above (and closingBalance) cover
-      // this account only. Children are all-time as-of dateTo so that
-      // consolidatedBalance equals the Balances page row (which is unfiltered).
+      // Child breakdown is all-time as-of dateTo so the child rows match what
+      // each child's own modal shows. consolidatedBalance == closingBalance.
       children: childBalances.children,
       childrenTotal: childBalances.total,
-      consolidatedBalance: runningBalance + childBalances.total
+      consolidatedBalance: runningBalance
     }
   },
 
