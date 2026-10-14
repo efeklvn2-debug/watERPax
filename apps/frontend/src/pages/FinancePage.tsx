@@ -2147,7 +2147,7 @@ export function FinancePage() {
                   if (isCashOrBankParent) payload.isCashAccount = true
                   const res = await financeApi.createAccount(payload)
                   if (res.data) {
-                    notify.success(`Account ${accountForm.code} created`)
+                    notify.success(`Account ${effectiveCode} created`)
                     const accsRes = await financeApi.getAccounts()
                     if (accsRes.data) setAccounts((accsRes.data as any).data || [])
                   } else {
@@ -2160,16 +2160,24 @@ export function FinancePage() {
               })
             }} className="space-y-4">
               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Parent Account</label>
+                <select value={selectedParentId} onChange={e => setSelectedParentId(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg">
+                  <option value="">None (top-level)</option>
+                  {accounts.filter(a => a.type === 'ASSET' && a.id !== accountForm.parentId).map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                </select>
+                <p className="text-xs text-slate-400 mt-1">Decides the code nomenclature — for cash or bank sub-accounts, select "Cash" (1000) or "Bank" (1100) and the code + type auto-fill</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Name <span className="text-red-500">*</span></label>
+                <input type="text" value={accountForm.name} onChange={e => setAccountForm({...accountForm, name: e.target.value})} className="w-full px-4 py-2 border border-slate-300 rounded-lg" required placeholder={isCashOrBankParent ? 'e.g. ECOBANK, Till 33cl' : 'e.g. Inventory Adjustments'} />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Code <span className="text-red-500">*</span></label>
                 <input type="text" value={isCashOrBankParent ? autoCode : accountForm.code}
                   onChange={e => !isCashOrBankParent && setAccountForm({...accountForm, code: e.target.value})}
                   disabled={isCashOrBankParent}
                   className={`w-full px-4 py-2 border rounded-lg ${isCashOrBankParent ? 'bg-slate-50 text-slate-500 border-slate-200' : 'border-slate-300'}`}
                   required placeholder={isCashOrBankParent ? 'Auto-generated from name' : 'e.g. 5200'} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Name <span className="text-red-500">*</span></label>
-                <input type="text" value={accountForm.name} onChange={e => setAccountForm({...accountForm, name: e.target.value})} className="w-full px-4 py-2 border border-slate-300 rounded-lg" required placeholder="e.g. Inventory Adjustments" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Type <span className="text-red-500">*</span></label>
@@ -2186,14 +2194,6 @@ export function FinancePage() {
                   <option value="COGS">COGS</option>
                 </select>
                 {isCashOrBankParent && <p className="text-xs text-slate-400 mt-1">Locked to ASSET — cash and bank sub-accounts are always assets</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Parent Account</label>
-                <select value={selectedParentId} onChange={e => setSelectedParentId(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg">
-                  <option value="">None (top-level)</option>
-                  {accounts.filter(a => a.type === 'ASSET' && a.id !== accountForm.parentId).map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-                </select>
-                <p className="text-xs text-slate-400 mt-1">For cash or bank sub-accounts, select "Cash" (1000) or "Bank" (1100) as parent — code and type auto-fill</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
