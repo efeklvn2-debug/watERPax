@@ -128,10 +128,10 @@ export function FinancePage() {
   const [selectedParentId, setSelectedParentId] = useState('')
 
   const selectedParentAccount = accounts.find((a: Account) => a.id === selectedParentId)
-  const isBankParent = selectedParentAccount?.code === '1100'
+  const isCashOrBankParent = selectedParentAccount?.code === '1100' || selectedParentAccount?.code === '1000'
 
-  const autoCode = isBankParent && accountForm.name
-    ? `1100-${accountForm.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 12) || 'BANK'}`
+  const autoCode = isCashOrBankParent && accountForm.name
+    ? `${selectedParentAccount?.code}-${accountForm.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 12) || (selectedParentAccount?.code === '1100' ? 'BANK' : 'CASH')}`
     : ''
 
   const canReverse = hasPermission('finance:write')
@@ -2133,8 +2133,8 @@ export function FinancePage() {
             <h2 className="text-xl font-bold mb-4">Add Account</h2>
             <form onSubmit={async (e) => {
               e.preventDefault()
-              const effectiveCode = isBankParent ? autoCode : accountForm.code
-              const effectiveType = isBankParent ? 'ASSET' : accountForm.type
+              const effectiveCode = isCashOrBankParent ? autoCode : accountForm.code
+              const effectiveType = isCashOrBankParent ? 'ASSET' : accountForm.type
               if (!effectiveCode || !accountForm.name || !effectiveType) {
                 notify.error('Code, name, and type are required')
                 return
@@ -2144,7 +2144,7 @@ export function FinancePage() {
                 setSavingAccount(true)
                 try {
                   const payload: any = { ...accountForm, code: effectiveCode, type: effectiveType, parentId: selectedParentId || undefined }
-                  if (isBankParent) payload.isCashAccount = true
+                  if (isCashOrBankParent) payload.isCashAccount = true
                   const res = await financeApi.createAccount(payload)
                   if (res.data) {
                     notify.success(`Account ${accountForm.code} created`)
@@ -2161,11 +2161,11 @@ export function FinancePage() {
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Code <span className="text-red-500">*</span></label>
-                <input type="text" value={isBankParent ? autoCode : accountForm.code}
-                  onChange={e => !isBankParent && setAccountForm({...accountForm, code: e.target.value})}
-                  disabled={isBankParent}
-                  className={`w-full px-4 py-2 border rounded-lg ${isBankParent ? 'bg-slate-50 text-slate-500 border-slate-200' : 'border-slate-300'}`}
-                  required placeholder={isBankParent ? 'Auto-generated from name' : 'e.g. 5200'} />
+                <input type="text" value={isCashOrBankParent ? autoCode : accountForm.code}
+                  onChange={e => !isCashOrBankParent && setAccountForm({...accountForm, code: e.target.value})}
+                  disabled={isCashOrBankParent}
+                  className={`w-full px-4 py-2 border rounded-lg ${isCashOrBankParent ? 'bg-slate-50 text-slate-500 border-slate-200' : 'border-slate-300'}`}
+                  required placeholder={isCashOrBankParent ? 'Auto-generated from name' : 'e.g. 5200'} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Name <span className="text-red-500">*</span></label>
@@ -2173,10 +2173,10 @@ export function FinancePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Type <span className="text-red-500">*</span></label>
-                <select value={isBankParent ? 'ASSET' : accountForm.type}
-                  onChange={e => !isBankParent && setAccountForm({...accountForm, type: e.target.value as Account['type'] | ''})}
-                  disabled={isBankParent}
-                  className={`w-full px-4 py-2 border rounded-lg ${isBankParent ? 'bg-slate-50 text-slate-500 border-slate-200' : 'border-slate-300'}`} required>
+                <select value={isCashOrBankParent ? 'ASSET' : accountForm.type}
+                  onChange={e => !isCashOrBankParent && setAccountForm({...accountForm, type: e.target.value as Account['type'] | ''})}
+                  disabled={isCashOrBankParent}
+                  className={`w-full px-4 py-2 border rounded-lg ${isCashOrBankParent ? 'bg-slate-50 text-slate-500 border-slate-200' : 'border-slate-300'}`} required>
                   <option value="">Select type</option>
                   <option value="ASSET">ASSET</option>
                   <option value="LIABILITY">LIABILITY</option>
@@ -2185,7 +2185,7 @@ export function FinancePage() {
                   <option value="EXPENSE">EXPENSE</option>
                   <option value="COGS">COGS</option>
                 </select>
-                {isBankParent && <p className="text-xs text-slate-400 mt-1">Locked to ASSET — bank sub-accounts are always assets</p>}
+                {isCashOrBankParent && <p className="text-xs text-slate-400 mt-1">Locked to ASSET — cash and bank sub-accounts are always assets</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Parent Account</label>
@@ -2193,7 +2193,7 @@ export function FinancePage() {
                   <option value="">None (top-level)</option>
                   {accounts.filter(a => a.type === 'ASSET' && a.id !== accountForm.parentId).map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
                 </select>
-                <p className="text-xs text-slate-400 mt-1">For bank sub-accounts, select "Bank" (1100) as parent — code and type auto-fill</p>
+                <p className="text-xs text-slate-400 mt-1">For cash or bank sub-accounts, select "Cash" (1000) or "Bank" (1100) as parent — code and type auto-fill</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>

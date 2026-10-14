@@ -74,8 +74,9 @@ export function summarizeDraft(draft: GuideAngelDraft, materialsMap?: Map<string
   const fgValue = sum(fgItems.map(f => f.quantity * (variantCostMap?.get(f.variantId) ?? 0)))
   const stockValue = rawStockValue + fgValue
   const bankBalance = sum(draft.bankAccounts.map(b => b.balance || 0))
+  const cashAccountsBalance = sum((draft.cashAccounts || []).map(c => c.balance || 0))
   const accumulatedDep = draft.accumulatedDepreciation || 0
-  const totalDebits = draft.cashBalance + bankBalance + customerReceivables + draft.fixedAssets + stockValue
+  const totalDebits = draft.cashBalance + bankBalance + cashAccountsBalance + customerReceivables + draft.fixedAssets + stockValue
   const totalCredits = supplierPayables + customerDeposits + draft.loans + draft.ownerCapital + accumulatedDep
   const openingEquity = totalDebits - totalCredits
 
@@ -91,6 +92,7 @@ export function summarizeDraft(draft: GuideAngelDraft, materialsMap?: Map<string
     fgValue,
     cashBalance: draft.cashBalance,
     bankBalance,
+    cashAccountsBalance,
     loans: draft.loans,
     fixedAssets: draft.fixedAssets,
     accumulatedDepreciation: accumulatedDep,
@@ -113,6 +115,12 @@ async function validateDraftBusinessRules(draft: GuideAngelDraft, materialsMap?:
     const key = bank.name.toLowerCase()
     if (bankNames.has(key)) errors.push(`Bank row ${index + 1} is duplicated`)
     bankNames.add(key)
+  })
+  const cashAccountNames = new Set<string>()
+  ;(draft.cashAccounts || []).forEach((cash, index) => {
+    const key = cash.name.toLowerCase()
+    if (cashAccountNames.has(key)) errors.push(`Cash account row ${index + 1} is duplicated`)
+    cashAccountNames.add(key)
   })
   const fgItems = draft.fgItems || []
   const seenVariants = new Set<string>()
@@ -151,6 +159,16 @@ async function getOrCreateBankAccount(tx: any, name: string) {
   if (existing) return existing
   return tx.account.create({
     data: { code, name, type: 'ASSET', parentId: parent.id, isCashAccount: true, description: 'Bank account created by Guide Angel' } as any
+  })
+}
+
+async function getOrCreateCashAccount(tx: any, name: string) {
+  const parent = await getAccount(tx, '1000')
+  const code = `1000-${name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 12) || 'CASH'}`
+  const existing = await tx.account.findFirst({ where: { code } })
+  if (existing) return existing
+  return tx.account.create({
+    data: { code, name, type: 'ASSET', parentId: parent.id, isCashAccount: true, description: 'Cash account created by Guide Angel' } as any
   })
 }
 
@@ -333,6 +351,11 @@ export const guideAngelService = {
       const addCredit = (id: string, amt: number, memo: string) => { if (amt > 0) lines.push({ accountId: id, debit: 0, credit: amt, memo }) }
 
       addDebit(accounts.cash.id, draft.cashBalance, 'Opening cash balance')
+      for (const cash of draft.cashAccounts || []) {
+        if (cash.balance <= 0) continue
+        const account = await getOrCreateCashAccount(tx, cash.name)
+        addDebit(account.id, cash.balance, `Opening cash balance: ${cash.name}`)
+      }
       for (const bank of draft.bankAccounts) {
         if (bank.balance <= 0) continue
         const account = await getOrCreateBankAccount(tx, bank.name)

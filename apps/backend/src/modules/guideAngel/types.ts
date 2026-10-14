@@ -33,6 +33,7 @@ export interface GuideAngelDraft {
   goLiveDate: string
   cashBalance: number
   bankAccounts: GuideAngelBankRow[]
+  cashAccounts: GuideAngelBankRow[]
   loans: number
   fixedAssets: number
   accumulatedDepreciation: number
@@ -55,6 +56,7 @@ export interface GuideAngelSummary {
   fgValue: number
   cashBalance: number
   bankBalance: number
+  cashAccountsBalance: number
   loans: number
   fixedAssets: number
   accumulatedDepreciation: number

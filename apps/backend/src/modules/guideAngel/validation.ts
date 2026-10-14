@@ -7,6 +7,11 @@ const bankSchema = z.object({
   balance: nonNegative
 })
 
+const cashAccountSchema = z.object({
+  name: z.string().trim().min(1, 'Cash account name is required'),
+  balance: nonNegative
+})
+
 const customerBalanceSchema = z.object({
   customerId: z.string().trim().min(1),
   receivableAmount: nonNegative,
@@ -33,6 +38,7 @@ export const guideAngelDraftSchema = z.object({
   goLiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Go-live date is required'),
   cashBalance: nonNegative,
   bankAccounts: z.array(bankSchema).max(100),
+  cashAccounts: z.array(cashAccountSchema).max(100).default([]),
   loans: nonNegative,
   fixedAssets: nonNegative,
   accumulatedDepreciation: nonNegative,

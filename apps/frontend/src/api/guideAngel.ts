@@ -32,6 +32,7 @@ export interface GuideAngelData {
 export interface GuideAngelDraft {
   goLiveDate: string
   cashBalance: number; bankAccounts: { name: string; balance: number }[]
+  cashAccounts: { name: string; balance: number }[]
   loans: number; fixedAssets: number; accumulatedDepreciation: number; ownerCapital: number
   customerBalances: { customerId: string; receivableAmount: number; depositAmount: number; jarBalance: number }[]
   supplierBalances: { supplierId: string; payableAmount: number }[]
@@ -42,7 +43,7 @@ export interface GuideAngelDraft {
 export interface GuideAngelSummary {
   customerCount: number; supplierCount: number; stockCount: number; fgCount: number
   customerReceivables: number; customerDeposits: number; supplierPayables: number; stockValue: number; fgValue: number
-  cashBalance: number; bankBalance: number; loans: number; fixedAssets: number
+  cashBalance: number; bankBalance: number; cashAccountsBalance: number; loans: number; fixedAssets: number
   accumulatedDepreciation: number; ownerCapital: number
   totalDebits: number; totalCredits: number; balanced: boolean; openingEquity: number
 }

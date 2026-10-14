@@ -1,11 +1,14 @@
 import { z } from 'zod'
 
 export const createAccountSchema = z.object({
-  code: z.string().min(1, 'Code is required'),
+  // Optional when parentId is a cash/bank parent (1000/1100) — the service
+  // auto-generates 1000-XXX / 1100-XXX from the name in that case.
+  code: z.string().min(1, 'Code is required').optional(),
   name: z.string().min(1, 'Name is required'),
   type: z.enum(['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE', 'COGS']),
   parentId: z.string().optional(),
   isVatEnabled: z.boolean().optional(),
+  isCashAccount: z.boolean().optional(),
   description: z.string().optional()
 })
 

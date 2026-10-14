@@ -12,7 +12,7 @@ import { formatNaira } from '../utils/currency'
 const today = todayLocal()
 
 const emptyDraft: GuideAngelDraft = {
-  goLiveDate: today, cashBalance: 0, bankAccounts: [], loans: 0,
+  goLiveDate: today, cashBalance: 0, bankAccounts: [], cashAccounts: [], loans: 0,
   fixedAssets: 0, accumulatedDepreciation: 0, ownerCapital: 0,
   customerBalances: [], supplierBalances: [], stockItems: [], fgItems: []
 }
@@ -44,7 +44,7 @@ function SummaryCards({ summary }: { summary?: GuideAngelSummary }) {
   const items = [
     ['Customers owe us', summary.customerReceivables],
     ['We owe suppliers', summary.supplierPayables],
-    ['Cash and bank', summary.cashBalance + summary.bankBalance],
+    ['Cash and bank', summary.cashBalance + summary.bankBalance + (summary.cashAccountsBalance || 0)],
     ['Opening stock value', summary.stockValue]
   ] as const
   return (
@@ -238,6 +238,10 @@ export function GuideAngelPage() {
               <div className="flex items-center justify-between mb-3"><h3 className="font-medium text-slate-700">Bank accounts</h3><button onClick={() => setDraft({ ...draft, bankAccounts: [...draft.bankAccounts, { name: '', balance: 0 }] })} className="text-sm text-blue-600 font-medium">+ Add bank</button></div>
               {draft.bankAccounts.length === 0 && <p className="text-sm text-slate-400">No bank account added.</p>}
               <div className="space-y-2">{draft.bankAccounts.map((bank, index) => <div key={index} className="flex gap-2"><input value={bank.name} onChange={e => setDraft({ ...draft, bankAccounts: draft.bankAccounts.map((b, i) => i === index ? { ...b, name: e.target.value } : b) })} placeholder="Bank name" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none" /><input type="number" min="0" value={bank.balance} onChange={e => setDraft({ ...draft, bankAccounts: draft.bankAccounts.map((b, i) => i === index ? { ...b, balance: Number(e.target.value) || 0 } : b) })} placeholder="Balance" className="w-40 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none" /><button onClick={() => setDraft({ ...draft, bankAccounts: draft.bankAccounts.filter((_, i) => i !== index) })} className="px-2 text-red-600">x</button></div>)}</div>
+              <div className="flex items-center justify-between mb-3 mt-5"><h3 className="font-medium text-slate-700">Cash accounts</h3><button onClick={() => setDraft({ ...draft, cashAccounts: [...(draft.cashAccounts || []), { name: '', balance: 0 }] })} className="text-sm text-blue-600 font-medium">+ Add cash account</button></div>
+              <p className="text-xs text-slate-400 mb-2">Separate cash tills (e.g. one per product line) — each becomes a 1000-XXX sub-account.</p>
+              {(draft.cashAccounts || []).length === 0 && <p className="text-sm text-slate-400">No cash sub-account added — all cash sits in the main 1000 account.</p>}
+              <div className="space-y-2">{(draft.cashAccounts || []).map((cash, index) => <div key={index} className="flex gap-2"><input value={cash.name} onChange={e => setDraft({ ...draft, cashAccounts: (draft.cashAccounts || []).map((c, i) => i === index ? { ...c, name: e.target.value } : c) })} placeholder="Cash account name" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none" /><input type="number" min="0" value={cash.balance} onChange={e => setDraft({ ...draft, cashAccounts: (draft.cashAccounts || []).map((c, i) => i === index ? { ...c, balance: Number(e.target.value) || 0 } : c) })} placeholder="Balance" className="w-40 px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none" /><button onClick={() => setDraft({ ...draft, cashAccounts: (draft.cashAccounts || []).filter((_, i) => i !== index) })} className="px-2 text-red-600">x</button></div>)}</div>
             </div>
           </>}
 
