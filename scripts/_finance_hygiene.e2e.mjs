@@ -322,6 +322,18 @@ async function main() {
   assert(r.status === 400, `Crediting cash child below zero rejected (got ${r.status})`)
   assert(r.data?.error?.code === 'INSUFFICIENT_CASH', `Error INSUFFICIENT_CASH (got ${r.data?.error?.code})`)
 
+  r = await admin.api(`/finance/ledger/${accId('1000')}`)
+  assert(r.status === 200, `Ledger for 1000 loads (got ${r.status})`)
+  const ledger = r.data?.data
+  assert(ledger.hasChildren === true, 'Ledger reports hasChildren')
+  assert(ledger.transactions.some(t => t.accountCode === cashChild.code), `Ledger table includes child lines (${cashChild.code})`)
+  r = await admin.api(`/finance/ledger/${accId('1100')}`)
+  const bankLedger = r.data?.data
+  assert(Math.abs(ledger.consolidatedBalance + bankLedger.consolidatedBalance - closingAfter) < 0.02, `Ledger trees (cash+bank) == dashboard cashPosition (${ledger.consolidatedBalance} + ${bankLedger.consolidatedBalance} vs ${closingAfter})`)
+  assert(Math.abs(ledger.ownClosingBalance + ledger.childrenTotal - ledger.closingBalance) < 0.02, `own + children == consolidated closing`)
+  const lastBalance = ledger.transactions[ledger.transactions.length - 1]?.balance
+  assert(Math.abs(lastBalance - ledger.closingBalance) < 0.02, `Running balance ends at closing (${lastBalance} vs ${ledger.closingBalance})`)
+
   // --- Summary ---
   const passed = results.filter(x => x.pass).length
   log(`\n=== ${passed}/${results.length} assertions passed ===`)

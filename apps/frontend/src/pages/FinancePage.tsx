@@ -74,6 +74,7 @@ export function FinancePage() {
   })
 
   const [bankAccounts, setBankAccounts] = useState<Account[]>([])
+  const [cashAccounts, setCashAccounts] = useState<Account[]>([])
 
   const [incomes, setIncomes] = useState<JournalEntry[]>([])
   const [showIncomeModal, setShowIncomeModal] = useState(false)
@@ -634,6 +635,10 @@ export function FinancePage() {
       const bankAccount = allAccounts.find((a: Account) => a.code === '1100')
       if (bankAccount) {
         setBankAccounts(allAccounts.filter((a: Account) => a.parentId === bankAccount.id))
+      }
+      const cashAccount = allAccounts.find((a: Account) => a.code === '1000')
+      if (cashAccount) {
+        setCashAccounts(allAccounts.filter((a: Account) => a.parentId === cashAccount.id))
       }
     }).catch(() => {})
 
@@ -1920,12 +1925,13 @@ export function FinancePage() {
                 </select>
               </div>
 
-              {expenseForm.paymentMethod === 'Bank Transfer' && bankAccounts.length > 0 && (
+              {(expenseForm.paymentMethod === 'Bank Transfer' || cashAccounts.length > 0) && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Bank Account</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{expenseForm.paymentMethod === 'Cash' ? 'Cash Account' : 'Bank Account'}</label>
                   <select value={expenseForm.bankAccountId} onChange={e => setExpenseForm({...expenseForm, bankAccountId: e.target.value})} className="w-full px-4 py-2 border border-slate-300 rounded-lg">
-                    <option value="">Default (Bank)</option>
-                    {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                    {expenseForm.paymentMethod === 'Bank Transfer' && bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                    {expenseForm.paymentMethod === 'Cash' && cashAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                    <option value="">Default ({expenseForm.paymentMethod === 'Cash' ? 'Cash — 1000' : 'Bank — 1100'})</option>
                   </select>
                 </div>
               )}
@@ -1990,12 +1996,13 @@ export function FinancePage() {
                 </select>
               </div>
 
-              {incomeForm.paymentMethod === 'Bank Transfer' && bankAccounts.length > 0 && (
+              {(incomeForm.paymentMethod === 'Bank Transfer' || cashAccounts.length > 0) && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Bank Account</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{incomeForm.paymentMethod === 'Cash' ? 'Cash Account' : 'Bank Account'}</label>
                   <select value={incomeForm.bankAccountId} onChange={e => setIncomeForm({...incomeForm, bankAccountId: e.target.value})} className="w-full px-4 py-2 border border-slate-300 rounded-lg">
-                    <option value="">Default (Bank)</option>
-                    {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                    {incomeForm.paymentMethod === 'Bank Transfer' && bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                    {incomeForm.paymentMethod === 'Cash' && cashAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                    <option value="">Default ({incomeForm.paymentMethod === 'Cash' ? 'Cash — 1000' : 'Bank — 1100'})</option>
                   </select>
                 </div>
               )}
@@ -2318,14 +2325,16 @@ export function FinancePage() {
               <>
                 <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
                   <div className="bg-slate-50 rounded-lg p-3">
-                    <span className="text-slate-500">Opening Balance</span>
+                    <span className="text-slate-500">Opening Balance{ledgerData.hasChildren ? ' (consolidated)' : ''}</span>
                     <p className="text-lg font-bold text-slate-900">{formatCurrency(ledgerData.openingBalance)}</p>
+                    {ledgerData.hasChildren && <p className="text-xs text-slate-400 mt-0.5">This account alone: {formatCurrency(ledgerData.ownOpeningBalance ?? ledgerData.openingBalance)}</p>}
                   </div>
                   <div className="bg-slate-50 rounded-lg p-3">
-                    <span className="text-slate-500">Closing Balance (this account only)</span>
+                    <span className="text-slate-500">Closing Balance{ledgerData.hasChildren ? ' (consolidated)' : ''}</span>
                     <p className={`text-lg font-bold ${ledgerData.closingBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                       {formatCurrency(ledgerData.closingBalance)}
                     </p>
+                    {ledgerData.hasChildren && <p className="text-xs text-slate-400 mt-0.5">This account alone: {formatCurrency(ledgerData.ownClosingBalance ?? ledgerData.closingBalance)}</p>}
                   </div>
                 </div>
 
@@ -2354,6 +2363,7 @@ export function FinancePage() {
                     <tr>
                       <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Entry #</th>
+                      {ledgerData.hasChildren && <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Account</th>}
                       <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Description</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Reference</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase">Debit</th>
@@ -2364,12 +2374,17 @@ export function FinancePage() {
                   <tbody className="divide-y divide-slate-200">
                     {ledgerData.transactions.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-slate-500">No transactions found</td>
+                        <td colSpan={ledgerData.hasChildren ? 8 : 7} className="px-4 py-8 text-center text-slate-500">No transactions found</td>
                       </tr>
                     ) : ledgerData.transactions.map((tx, i) => (
                       <tr key={i} className="hover:bg-slate-50">
                         <td className="px-4 py-2 text-sm text-slate-600">{formatDate(tx.date)}</td>
                         <td className="px-4 py-2 text-sm font-mono text-slate-900">{tx.entryNumber}</td>
+                        {ledgerData.hasChildren && (
+                          <td className={`px-4 py-2 text-sm font-mono ${tx.accountCode && tx.accountCode !== ledgerData.account.code ? 'text-blue-700' : 'text-slate-400'}`}>
+                            {tx.accountCode || ledgerData.account.code}
+                          </td>
+                        )}
                         <td className="px-4 py-2 text-sm text-slate-900">{tx.description}</td>
                         <td className="px-4 py-2 text-sm text-slate-500">{tx.reference || '-'}</td>
                         <td className="px-4 py-2 text-sm text-right text-slate-900">{tx.debit > 0 ? formatCurrency(tx.debit) : '-'}</td>
