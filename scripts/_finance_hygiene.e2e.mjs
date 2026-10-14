@@ -283,6 +283,45 @@ async function main() {
   assert(r.status === 400, `Second CIT post rejected 400 (got ${r.status})`)
   assert(r.data?.error?.code === 'CONFLICT', `Error CONFLICT (got ${r.data?.error?.code})`)
 
+  // ========== TEST 9: cash account 1000 parent-child (mirror of bank 1100) ==========
+  log('\n9. Cash child account 1000-XXX: creation, CASH deposit routing, negative-cash guard, dashboard consolidation')
+  r = await admin.api('/finance/dashboard')
+  const closingBefore = Number(r.data?.data?.cashPosition?.closingBalance ?? 0)
+
+  r = await admin.api('/finance/accounts', {
+    method: 'POST',
+    body: { name: `Till 33cl ${ts}`, type: 'ASSET', parentId: accId('1000') },
+  })
+  assert(r.status === 201, `Cash child account created (got ${r.status})`)
+  const cashChild = r.data?.data
+  assert(!!cashChild?.code && cashChild.code.startsWith('1000-'), `Cash child code auto-generated 1000-XXX (got ${cashChild?.code})`)
+  assert(cashChild.isCashAccount === true && cashChild.type === 'ASSET', 'Cash child flagged isCashAccount + ASSET')
+
+  r = await admin.api('/sales/deposits', {
+    method: 'POST',
+    body: { customerId, amount: 100, method: 'CASH', bankAccountId: cashChild.id },
+  })
+  assert(r.status === 201, `CASH deposit routed to cash child (got ${r.status})`)
+
+  r = await admin.api('/finance/dashboard')
+  const closingAfter = Number(r.data?.data?.cashPosition?.closingBalance ?? 0)
+  assert(Math.abs((closingAfter - closingBefore) - 100) < 0.02, `Dashboard cashPosition includes cash child (+100, got ${closingAfter - closingBefore})`)
+
+  r = await admin.api('/finance/journal', {
+    method: 'POST',
+    body: {
+      description: 'FH probe: overdraw cash child',
+      sourceModule: 'ADJUSTMENT',
+      date: today,
+      lines: [
+        { accountId: accId('1000'), debit: 201, credit: 0, memo: 'top up parent' },
+        { accountId: cashChild.id, debit: 0, credit: 201, memo: 'overdraw child' },
+      ],
+    },
+  })
+  assert(r.status === 400, `Crediting cash child below zero rejected (got ${r.status})`)
+  assert(r.data?.error?.code === 'INSUFFICIENT_CASH', `Error INSUFFICIENT_CASH (got ${r.data?.error?.code})`)
+
   // --- Summary ---
   const passed = results.filter(x => x.pass).length
   log(`\n=== ${passed}/${results.length} assertions passed ===`)

@@ -98,6 +98,7 @@ export function SalesPaymentsTab() {
   const [depRef, setDepRef] = useState('')
   const [depBankAccountId, setDepBankAccountId] = useState('')
   const [bankAccounts, setBankAccounts] = useState<Account[]>([])
+  const [cashAccounts, setCashAccounts] = useState<Account[]>([])
   const [busy, setBusy] = useState(false)
   const [receiptDropdown, setReceiptDropdown] = useState<string | null>(null)
   const receiptMenuRef = useRef<HTMLDivElement | null>(null)
@@ -122,6 +123,8 @@ export function SalesPaymentsTab() {
       const all = (res.data as any)?.data || []
       const bank1100 = all.find((a: Account) => a.code === '1100')
       if (bank1100) setBankAccounts(all.filter((a: Account) => a.parentId === bank1100.id))
+      const cash1000 = all.find((a: Account) => a.code === '1000')
+      if (cash1000) setCashAccounts(all.filter((a: Account) => a.parentId === cash1000.id))
     })
   }, [dateFrom, dateTo])
 
@@ -292,13 +295,14 @@ export function SalesPaymentsTab() {
                   </select>
                 </div>
               </div>
-              {depMethod === 'BANK_TRANSFER' && (
+              {(depMethod === 'BANK_TRANSFER' || cashAccounts.length > 0) && (
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Bank Account</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{depMethod === 'CASH' ? 'Cash Account' : 'Bank Account'}</label>
                   <select value={depBankAccountId} onChange={e => setDepBankAccountId(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                    {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-                    <option value="">Default (Bank — 1100)</option>
+                    {depMethod === 'BANK_TRANSFER' && bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                    {depMethod === 'CASH' && cashAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                    <option value="">Default ({depMethod === 'CASH' ? 'Cash — 1000' : 'Bank — 1100'})</option>
                   </select>
                 </div>
               )}

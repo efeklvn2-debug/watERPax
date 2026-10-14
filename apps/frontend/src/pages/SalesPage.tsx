@@ -218,6 +218,7 @@ export function SalesPage() {
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState<'orders' | 'invoices' | 'payments' | 'returns'>('orders')
   const [bankAccounts, setBankAccounts] = useState<Account[]>([])
+  const [cashAccounts, setCashAccounts] = useState<Account[]>([])
   const [payBankAccountId, setPayBankAccountId] = useState('')
   const [showDeliverPay, setShowDeliverPay] = useState(false)
   const [deliverMethod, setDeliverMethod] = useState<'CASH' | 'BANK_TRANSFER'>('CASH')
@@ -283,6 +284,8 @@ export function SalesPage() {
       const all = (res.data as any)?.data || []
       const bank1100 = all.find((a: Account) => a.code === '1100')
       if (bank1100) setBankAccounts(all.filter((a: Account) => a.parentId === bank1100.id))
+      const cash1000 = all.find((a: Account) => a.code === '1000')
+      if (cash1000) setCashAccounts(all.filter((a: Account) => a.parentId === cash1000.id))
     })
     if (searchParams.toString()) setSearchParams({}, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -402,7 +405,7 @@ export function SalesPage() {
       refundMethod: returnRefundMethod,
       date: returnDate,
       notes: returnNotes || undefined,
-      bankAccountId: returnRefundMethod === 'BANK' && returnBankAccountId ? returnBankAccountId : undefined
+      bankAccountId: (returnRefundMethod === 'BANK' || returnRefundMethod === 'CASH') && returnBankAccountId ? returnBankAccountId : undefined
     })
     setBusy(false)
     if (res.error) { notify.error(res.error.message); return }
@@ -792,10 +795,11 @@ export function SalesPage() {
                           <option value="BANK_TRANSFER">Bank transfer</option>
                         </select>
                       </div>
-                      {deliverMethod === 'BANK_TRANSFER' && (
+                      {(deliverMethod === 'BANK_TRANSFER' || cashAccounts.length > 0) && (
                         <select value={deliverBankAccountId} onChange={e => setDeliverBankAccountId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                          {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-                          <option value="">Default (Bank — 1100)</option>
+                          {deliverMethod === 'BANK_TRANSFER' && bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                          {deliverMethod === 'CASH' && cashAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                          <option value="">Default ({deliverMethod === 'CASH' ? 'Cash — 1000' : 'Bank — 1100'})</option>
                         </select>
                       )}
                       <div className="flex gap-2">
@@ -824,10 +828,11 @@ export function SalesPage() {
                         <option value="BANK_TRANSFER">Bank transfer</option>
                       </select>
                     </div>
-                    {payMethod === 'BANK_TRANSFER' && (
+                    {(payMethod === 'BANK_TRANSFER' || cashAccounts.length > 0) && (
                       <select value={payBankAccountId} onChange={e => setPayBankAccountId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                        {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-                        <option value="">Default (Bank — 1100)</option>
+                        {payMethod === 'BANK_TRANSFER' && bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                        {payMethod === 'CASH' && cashAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                        <option value="">Default ({payMethod === 'CASH' ? 'Cash — 1000' : 'Bank — 1100'})</option>
                       </select>
                     )}
                     {Number(payAmount) > openBalance && (
@@ -905,10 +910,11 @@ export function SalesPage() {
                     <option value="BANK">Refund bank</option>
                   </select>
                 </div>
-                {returnRefundMethod === 'BANK' && (
+                {(returnRefundMethod === 'BANK' || (returnRefundMethod === 'CASH' && cashAccounts.length > 0)) && (
                   <select value={returnBankAccountId} onChange={e => setReturnBankAccountId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                    <option value="">Select bank account (optional — defaults to 1100)</option>
-                    {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                    <option value="">{returnRefundMethod === 'CASH' ? 'Default (Cash — 1000)' : 'Select bank account (optional — defaults to 1100)'}</option>
+                    {returnRefundMethod === 'BANK' && bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                    {returnRefundMethod === 'CASH' && cashAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
                   </select>
                 )}
                 {isDateLocked(returnDate, booksLockedUntil) && (

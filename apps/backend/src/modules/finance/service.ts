@@ -61,7 +61,7 @@ export const financeService = {
       include: { parent: true }
     })
     if (!account) throw new AppError(404, 'NOT_FOUND', 'Bank account not found')
-    const isCash = account.isCashAccount || account.code === '1000' || account.code === '1100' || account.parent?.code === '1100'
+    const isCash = account.isCashAccount || account.code === '1000' || account.code === '1100' || account.parent?.code === '1100' || account.parent?.code === '1000'
     if (!isCash) {
       throw new AppError(400, 'INVALID_CASH_ACCOUNT', `${account.name} (${account.code}) is not a cash or bank account`)
     }
@@ -110,7 +110,7 @@ export const financeService = {
     if (input.parentId) {
       const parent = await financeRepository.findAccountById(input.parentId)
       if (!parent) throw new AppError(400, 'INVALID', 'Parent account not found')
-      if (parent.code === '1100') {
+      if (parent.code === '1100' || parent.code === '1000') {
         type = 'ASSET'
         isCashAccount = true
       }
@@ -122,6 +122,9 @@ export const financeService = {
       if (parent?.code === '1100') {
         const sanitized = input.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 12) || 'BANK'
         code = `1100-${sanitized}`
+      } else if (parent?.code === '1000') {
+        const sanitized = input.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 12) || 'CASH'
+        code = `1000-${sanitized}`
       }
     }
     if (!code) throw new AppError(400, 'INVALID', 'Account code is required')
@@ -214,7 +217,7 @@ export const financeService = {
         include: { parent: true }
       })
       for (const a of cashAccounts) {
-        if (a.code === '1000' || a.code === '1100' || (a.parent && a.parent.code === '1100')) {
+        if (a.code === '1000' || a.code === '1100' || (a.parent && (a.parent.code === '1100' || a.parent.code === '1000'))) {
           cashAccountIds.add(a.id)
         }
       }

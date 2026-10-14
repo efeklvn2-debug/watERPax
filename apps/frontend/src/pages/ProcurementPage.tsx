@@ -69,6 +69,7 @@ export function ProcurementPage() {
   const [payDate, setPayDate] = useState(todayLocal())
   const [payBankAccountId, setPayBankAccountId] = useState('')
   const [bankAccounts, setBankAccounts] = useState<Account[]>([])
+  const [cashAccounts, setCashAccounts] = useState<Account[]>([])
   const [poSearch, setPoSearch] = useState('')
   const [poStatus, setPoStatus] = useState('')
   const [invSearch, setInvSearch] = useState('')
@@ -133,6 +134,8 @@ export function ProcurementPage() {
       const all = (res.data as any)?.data || []
       const bank1100 = all.find((a: Account) => a.code === '1100')
       if (bank1100) setBankAccounts(all.filter((a: Account) => a.parentId === bank1100.id))
+      const cash1000 = all.find((a: Account) => a.code === '1000')
+      if (cash1000) setCashAccounts(all.filter((a: Account) => a.parentId === cash1000.id))
     })
   }, [])
 
@@ -490,12 +493,13 @@ export function ProcurementPage() {
                             <option value="Bank Transfer">Bank transfer</option>
                           </select>
                         </label>
-                        {payMethod === 'Bank Transfer' && (
+                        {(payMethod === 'Bank Transfer' || cashAccounts.length > 0) && (
                           <label className="block">
-                            <span className="block text-xs font-medium text-slate-600 mb-1">Bank Account</span>
+                            <span className="block text-xs font-medium text-slate-600 mb-1">{payMethod === 'Cash' ? 'Cash Account' : 'Bank Account'}</span>
                             <select value={payBankAccountId} onChange={e => setPayBankAccountId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                              {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-                              <option value="">Default (Bank — 1100)</option>
+                              {payMethod === 'Bank Transfer' && bankAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                              {payMethod === 'Cash' && cashAccounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                              <option value="">Default ({payMethod === 'Cash' ? 'Cash — 1000' : 'Bank — 1100'})</option>
                             </select>
                           </label>
                         )}

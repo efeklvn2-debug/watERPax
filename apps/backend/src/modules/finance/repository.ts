@@ -339,7 +339,11 @@ export const financeRepository = {
     const cashParent = await prisma.account.findFirst({ where: { code: '1000', isActive: true } })
 
     const cashAccountIds: string[] = []
-    if (cashParent) cashAccountIds.push(cashParent.id)
+    if (cashParent) {
+      cashAccountIds.push(cashParent.id)
+      const cashChildren = await prisma.account.findMany({ where: { parentId: cashParent.id, isActive: true }, select: { id: true } })
+      for (const child of cashChildren) cashAccountIds.push(child.id)
+    }
     if (bankParent) {
       cashAccountIds.push(bankParent.id)
       const bankChildren = await prisma.account.findMany({ where: { parentId: bankParent.id, isActive: true }, select: { id: true } })

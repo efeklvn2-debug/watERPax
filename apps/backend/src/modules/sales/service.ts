@@ -995,7 +995,12 @@ export const salesService = {
       let refundAccountId: string
       let refundMethodForJE: string
       if (refundMethod === 'CASH') {
-        refundAccountId = await getAccountId(tx, CASH_ACCOUNT)
+        if (input.bankAccountId) {
+          await financeService.assertCashAccount(tx, input.bankAccountId)
+          refundAccountId = input.bankAccountId
+        } else {
+          refundAccountId = await getAccountId(tx, CASH_ACCOUNT)
+        }
         refundMethodForJE = 'Cash'
       } else if (refundMethod === 'BANK') {
         if (input.bankAccountId) {
