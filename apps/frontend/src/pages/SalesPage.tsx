@@ -223,6 +223,7 @@ export function SalesPage() {
   const [showDeliverPay, setShowDeliverPay] = useState(false)
   const [deliverMethod, setDeliverMethod] = useState<'CASH' | 'BANK_TRANSFER'>('CASH')
   const [deliverBankAccountId, setDeliverBankAccountId] = useState('')
+  const [deliverDepositHeld, setDeliverDepositHeld] = useState<number | null>(null)
   const [creditNotes, setCreditNotes] = useState<CustomerCreditNote[]>([])
   const [showReturnForm, setShowReturnForm] = useState(false)
   const [returnSaleId, setReturnSaleId] = useState('')
@@ -780,7 +781,7 @@ export function SalesPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       {!showDeliverPay && (
                         <>
-                          <button onClick={() => { setShowDeliverPay(true); setDeliverMethod('CASH'); setDeliverBankAccountId('') }} disabled={busy} className="px-4 py-2 text-sm text-white bg-green-600 rounded-lg disabled:opacity-50">Deliver + Payment</button>
+                          <button onClick={() => { setShowDeliverPay(true); setDeliverMethod('CASH'); setDeliverBankAccountId(''); setDeliverDepositHeld(null); customersApi.balance(selected.customerId).then(res => { if (res.data) setDeliverDepositHeld(res.data.depositHeld) }).catch(() => {}) }} disabled={busy} className="px-4 py-2 text-sm text-white bg-green-600 rounded-lg disabled:opacity-50">Deliver + Payment</button>
                           <button onClick={() => doDeliver(selected.id)} disabled={busy} className="px-4 py-2 text-sm text-white bg-amber-600 rounded-lg disabled:opacity-50">Deliver on credit</button>
                         </>
                       )}
@@ -788,6 +789,13 @@ export function SalesPage() {
                   )}
                   {selected.status === 'CONFIRMED' && canDeliver && showDeliverPay && (
                     <div className="border-t border-slate-100 pt-3 space-y-2 w-full">
+                      {deliverDepositHeld !== null && deliverDepositHeld > 0 && (
+                        <div className="text-xs bg-blue-50 border border-blue-200 text-blue-800 rounded-lg px-3 py-2">
+                          {deliverDepositHeld >= Number(selected.totalAmount)
+                            ? <>This customer holds <b>{formatNaira(deliverDepositHeld)}</b> in deposits — the full invoice ({formatNaira(Number(selected.totalAmount))}) will be auto-settled from deposits. No cash needed.</>
+                            : <><b>{formatNaira(deliverDepositHeld)}</b> from this customer's deposit will be auto-applied to the invoice; cash needed: <b>{formatNaira(Math.max(0, Number(selected.totalAmount) - deliverDepositHeld))}</b>.</>}
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
                         <label className="text-xs font-medium text-slate-600">Payment method</label>
                         <select value={deliverMethod} onChange={e => { setDeliverMethod(e.target.value as any); setDeliverBankAccountId('') }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm">
